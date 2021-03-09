@@ -1,5 +1,7 @@
 /data_sources.md
 /sources
+/cache
+/out
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

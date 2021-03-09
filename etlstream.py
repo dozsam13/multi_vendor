@@ -434,7 +434,6 @@ class StreamSB(Stream):
 
     def __init__(self, segment_to_read, use_cache):
         super(StreamSB, self).__init__(segment_to_read, use_cache)
-
         self.cntr = 0
         self.root = os.path.join(utils.DB_PATH, StreamSB.root_fd)
         self.cache = os.path.join(utils.DB_PATH, StreamSB.cache_fd)

@@ -1,8 +1,7 @@
 import logging
 import pathlib
-import os
 
-DB_PATH = os.path.join(pathlib.Path(__file__).parent.absolute(), 'sources')
+DB_PATH = pathlib.Path(__file__).parent.absolute()
 
 
 def get_logger(name):
