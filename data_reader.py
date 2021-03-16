@@ -1,6 +1,7 @@
 import pickle
 import os
 import sys
+import numpy as np
 
 
 class DataReader:
@@ -14,7 +15,7 @@ class DataReader:
                     try:
                         patient_data = pickle.load(patient_file)
                         self.x.extend(list(map(lambda x: x.reshape(1, 256, 256), patient_data.images)))
-                        self.y.extend(list(map(lambda y: y.reshape(1, 256, 256), patient_data.contours)))
+                        self.y.extend(list(map(lambda y: y.reshape(1, 256, 256)/255.0, patient_data.contours)))
 
                     except EOFError:
                         break

@@ -448,7 +448,7 @@ class StreamSB(Stream):
         # full roots for the images and the contours
         contour_root = os.path.join(self.root, "scd_manualcontours")
         # read the mapping file (patientID -> originalID)
-        df = pd.read_excel(os.path.join(self.root, "scd_patientdata.xlsx"), index_col=0, usecols=[0, 1, 2])
+        df = pd.read_excel(os.path.join(self.root, "scd_patientdata.xlsx"), index_col=0, usecols=[0, 1, 2], engine='openpyxl')
         # iterate through the image folders and find the corresponding contours
         for img_folder in img_folders:
             self.cntr += 1

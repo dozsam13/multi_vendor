@@ -12,7 +12,7 @@ from etlstream import StreamFactory
 
 def run_prerocess(origin):
     to_dir = os.path.join(sys.argv[1], origin.name)
-    stream = StreamFactory.create(etlstream.Origin.SB, use_cache=True)
+    stream = StreamFactory.create(etlstream.Origin.SB, use_cache=False)
 
     for p in stream.stream_from_source():
         pickle_file_path = os.path.join(to_dir, p.patient_id + ".p")
