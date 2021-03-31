@@ -30,7 +30,8 @@ def run_prerocess(origin):
             if not ln_contour is None and not lp_contour is None:
                 cv2.drawContours(left_ventricle_contour_mask, [lp_contour], 0, color=255, thickness=-1)
                 cv2.drawContours(left_ventricle_contour_mask, [ln_contour], 0, color=0, thickness=-1)
-                patient_data.add_data(img.image, left_ventricle_contour_mask)
+                img.image *= 255 / img.image.max()
+                patient_data.add_data(img.image.astype('uint8'), left_ventricle_contour_mask.astype('uint8'))
 
         if not patient_data.is_empty():
             os.makedirs(os.path.dirname(pickle_file_path), exist_ok=True)
