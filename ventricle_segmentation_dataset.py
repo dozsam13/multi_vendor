@@ -1,7 +1,7 @@
 from torch.utils.data import Dataset
 import torch
 from torchvision import transforms
-
+import numpy as np
 
 class VentricleSegmentationDataset(Dataset):
     default_augmenter = transforms.Compose([
@@ -19,9 +19,11 @@ class VentricleSegmentationDataset(Dataset):
         return len(self.images)
 
     def __getitem__(self, index):
-        img = self.augmenter(self.images[index])
+        stacked_data = np.append(self.targets[index], np.repeat(self.images[index], 2, axis=2), axis=2).astype('uint8')
+
+        img = self.augmenter(stacked_data)
         sample = {
-            'image': img.to(self.device),
-            'target': torch.tensor(self.targets[index], dtype=torch.float, device=self.device)
+            'image': torch.unsqueeze(img[0, :, :], 0).to(self.device),
+            'target': torch.unsqueeze(img[2, :, :], 0).to(self.device)
         }
         return sample

@@ -8,6 +8,7 @@ import torch.nn as nn
 import torch.optim as optim
 import numpy as np
 from torchvision import transforms
+import utils
 
 
 def calculate_loss(loader, model, criterion):
@@ -56,25 +57,28 @@ def run_train():
     path = sys.argv[1]
     data_reader = DataReader(path)
 
-    x_train = data_reader.x[:int(len(data_reader.x)*0.66)]
-    y_train = data_reader.y[:int(len(data_reader.x)*0.66)]
-    x_test = data_reader.x[int(len(data_reader.x)*0.66):]
-    y_test = data_reader.y[int(len(data_reader.x)*0.66):]
+    x_train = data_reader.x[:int(len(data_reader.x)*0.1)]
+    y_train = data_reader.y[:int(len(data_reader.x)*0.1)]
+    x_test = data_reader.x[int(len(data_reader.x)*0.99):]
+    y_test = data_reader.y[int(len(data_reader.x)*0.99):]
 
     batch_size = 15
     augmenter = transforms.Compose([
             transforms.ToPILImage(),
-           # transforms.RandomAffine([-45, 45]),
+            transforms.RandomAffine([-45, 45]),
             transforms.ToTensor()
         ])
     device = torch.device('cuda')
     dataset_train = VentricleSegmentationDataset(x_train, y_train, device, augmenter)
     loader_train = DataLoader(dataset_train, batch_size)
+    loader_train_accuracy = DataLoader(dataset_train, 1)
     dataset_dev = VentricleSegmentationDataset(x_test, y_test, device)
     loader_dev = DataLoader(dataset_dev, batch_size)
     loader_dev_accuracy = DataLoader(dataset_dev, 1)
 
     model = nn.Sequential(
+    	nn.Conv2d(in_channels=1, out_channels=3, kernel_size=(1, 1)),
+    	nn.BatchNorm2d(3),
         torch.hub.load('mateuszbuda/brain-segmentation-pytorch', 'unet', in_channels=3, out_channels=1, init_features=32, pretrained=True)
     )
 
@@ -95,11 +99,14 @@ def run_train():
             loss.backward()
             optimizer.step()
             train_loss += loss.cpu().detach().numpy()
+            break
         train_losses.append(train_loss / len(loader_train))
         dev_losses.append(calculate_loss(loader_dev, model, criterion))
+        utils.progress_bar(epoch+1, epochs, 50, prefix='Training:')
     plot_data(train_losses, 'train_losses', dev_losses, 'dev_losses', 'losses.png')
     model.eval()
-    print("Dice: ", calc_dice(model, loader_dev_accuracy))
+    print("Train dice: ", calc_dice(model, loader_train_accuracy))
+    print("Test dice: ", calc_dice(model, loader_dev_accuracy))
     pred_mask = torch.round(model(dataset_train[0]['image'].unsqueeze(0))).cpu().detach().numpy().reshape(256, 256)
     expected_mask = dataset_train[0]['target'].cpu().detach().numpy().reshape(256, 256)
     plt.imsave('mask.png', pred_mask)

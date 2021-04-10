@@ -14,8 +14,9 @@ class DataReader:
                 while True:
                     try:
                         patient_data = pickle.load(patient_file)
-                        self.x.extend(list(map(lambda x: np.repeat(x.reshape(256, 256, 1), 3, axis=2).astype('uint8'), patient_data.images)))
-                        self.y.extend(list(map(lambda y: y.reshape(1, 256, 256).astype('uint8')/255.0, patient_data.contours)))
+                        #self.x.extend(list(map(lambda x: np.repeat(x.reshape(256, 256, 1), 3, axis=2).astype('uint8'), patient_data.images)))
+                        self.x.extend(list(map(lambda x: x.reshape(256, 256, 1), patient_data.images)))
+                        self.y.extend(list(map(lambda y: y.reshape(256, 256, 1)/255.0, patient_data.contours)))
 
                     except EOFError:
                         break

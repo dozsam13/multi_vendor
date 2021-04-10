@@ -10,7 +10,7 @@ import patient
 from etlstream import StreamFactory
 
 
-def run_prerocess(origin):
+def run_prerocess(origin, filled=False):
     to_dir = os.path.join(sys.argv[1], origin.name)
     stream = StreamFactory.create(etlstream.Origin.SB, use_cache=False)
 
@@ -29,8 +29,10 @@ def run_prerocess(origin):
                     lp_contour = cont.contour_mtx.astype(np.int32)
             if not ln_contour is None and not lp_contour is None:
                 cv2.drawContours(left_ventricle_contour_mask, [lp_contour], 0, color=255, thickness=-1)
-                cv2.drawContours(left_ventricle_contour_mask, [ln_contour], 0, color=0, thickness=-1)
-                img.image *= 255 / img.image.max()
+                if not filled:
+                    cv2.drawContours(left_ventricle_contour_mask, [ln_contour], 0, color=0, thickness=-1)
+                img.image = img.image.astype('float64')
+                img.image *= 255.0 / img.image.max()
                 patient_data.add_data(img.image.astype('uint8'), left_ventricle_contour_mask.astype('uint8'))
 
         if not patient_data.is_empty():
@@ -40,4 +42,4 @@ def run_prerocess(origin):
 
 
 if __name__ == "__main__":
-    run_prerocess(etlstream.Origin.SB)
+    run_prerocess(etlstream.Origin.SB, True)
