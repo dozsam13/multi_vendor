@@ -57,10 +57,10 @@ def run_train():
     path = sys.argv[1]
     data_reader = DataReader(path)
 
-    x_train = data_reader.x[:int(len(data_reader.x) * 0.1)]
-    y_train = data_reader.y[:int(len(data_reader.x) * 0.1)]
-    x_test = data_reader.x[int(len(data_reader.x) * 0.99):]
-    y_test = data_reader.y[int(len(data_reader.x) * 0.99):]
+    x_train = data_reader.x[:int(len(data_reader.x) * 0.66)]
+    y_train = data_reader.y[:int(len(data_reader.x) * 0.66)]
+    x_test = data_reader.x[int(len(data_reader.x) * 0.66):]
+    y_test = data_reader.y[int(len(data_reader.x) * 0.66):]
 
     batch_size = 15
     augmenter = transforms.Compose([
