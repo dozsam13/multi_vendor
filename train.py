@@ -40,7 +40,7 @@ def calc_dice(model, loader_dev):
         predicted = model(img)
         predicted = torch.round(predicted).cpu().detach().numpy()
         s += calc_dice_for_img(predicted, target)
-    return s/len(loader_dev)
+    return s / len(loader_dev)
 
 
 def calc_dice_for_img(predicted, target):
@@ -57,17 +57,17 @@ def run_train():
     path = sys.argv[1]
     data_reader = DataReader(path)
 
-    x_train = data_reader.x[:int(len(data_reader.x)*0.1)]
-    y_train = data_reader.y[:int(len(data_reader.x)*0.1)]
-    x_test = data_reader.x[int(len(data_reader.x)*0.99):]
-    y_test = data_reader.y[int(len(data_reader.x)*0.99):]
+    x_train = data_reader.x[:int(len(data_reader.x) * 0.1)]
+    y_train = data_reader.y[:int(len(data_reader.x) * 0.1)]
+    x_test = data_reader.x[int(len(data_reader.x) * 0.99):]
+    y_test = data_reader.y[int(len(data_reader.x) * 0.99):]
 
     batch_size = 15
     augmenter = transforms.Compose([
-            transforms.ToPILImage(),
-            transforms.RandomAffine([-45, 45]),
-            transforms.ToTensor()
-        ])
+        transforms.ToPILImage(),
+        transforms.RandomAffine([-45, 45]),
+        transforms.ToTensor()
+    ])
     device = torch.device('cuda')
     dataset_train = VentricleSegmentationDataset(x_train, y_train, device, augmenter)
     loader_train = DataLoader(dataset_train, batch_size)
@@ -77,9 +77,10 @@ def run_train():
     loader_dev_accuracy = DataLoader(dataset_dev, 1)
 
     model = nn.Sequential(
-    	nn.Conv2d(in_channels=1, out_channels=3, kernel_size=(1, 1)),
-    	nn.BatchNorm2d(3),
-        torch.hub.load('mateuszbuda/brain-segmentation-pytorch', 'unet', in_channels=3, out_channels=1, init_features=32, pretrained=True)
+        nn.Conv2d(in_channels=1, out_channels=3, kernel_size=(1, 1)),
+        nn.BatchNorm2d(3),
+        torch.hub.load('mateuszbuda/brain-segmentation-pytorch', 'unet', in_channels=3, out_channels=1,
+                       init_features=32, pretrained=True)
     )
 
     epochs = 10
@@ -99,10 +100,9 @@ def run_train():
             loss.backward()
             optimizer.step()
             train_loss += loss.cpu().detach().numpy()
-            break
         train_losses.append(train_loss / len(loader_train))
         dev_losses.append(calculate_loss(loader_dev, model, criterion))
-        utils.progress_bar(epoch+1, epochs, 50, prefix='Training:')
+        utils.progress_bar(epoch + 1, epochs, 50, prefix='Training:')
     plot_data(train_losses, 'train_losses', dev_losses, 'dev_losses', 'losses.png')
     model.eval()
     print("Train dice: ", calc_dice(model, loader_train_accuracy))
@@ -111,8 +111,8 @@ def run_train():
     expected_mask = dataset_train[0]['target'].cpu().detach().numpy().reshape(256, 256)
     plt.imsave('mask.png', pred_mask)
     plt.imsave('mask_expected.png', expected_mask)
-    plt.imsave('image.png', dataset_train[0]['image'][0,:,:].cpu().detach().numpy().reshape(256, 256))
+    plt.imsave('image.png', dataset_train[0]['image'][0, :, :].cpu().detach().numpy().reshape(256, 256))
+
 
 if __name__ == '__main__':
     run_train()
-
