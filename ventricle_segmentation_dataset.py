@@ -3,6 +3,7 @@ import torch
 from torchvision import transforms
 import numpy as np
 
+
 class VentricleSegmentationDataset(Dataset):
     default_augmenter = transforms.Compose([
         transforms.ToPILImage(),
@@ -21,9 +22,9 @@ class VentricleSegmentationDataset(Dataset):
     def __getitem__(self, index):
         stacked_data = np.append(self.targets[index], np.repeat(self.images[index], 2, axis=2), axis=2).astype('uint8')
 
-        img = self.augmenter(stacked_data)
+        img = self.augmenter(stacked_data)*255.0
         sample = {
-            'image': torch.unsqueeze(img[0, :, :], 0).to(self.device),
-            'target': torch.unsqueeze(img[2, :, :], 0).to(self.device)
+            'image': torch.unsqueeze(img[1, :, :], 0).to(self.device),
+            'target': torch.unsqueeze(img[0, :, :], 0).to(self.device),
         }
         return sample
