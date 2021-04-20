@@ -11,6 +11,7 @@ from torchvision import transforms
 import utils
 import os
 import pathlib
+import img_warp
 
 
 def calculate_loss(loader, model, criterion):
@@ -84,6 +85,7 @@ def run_train():
 
     batch_size = 15
     augmenter = transforms.Compose([
+        img_warp.SineWarp(10),
         transforms.ToPILImage(),
         transforms.RandomAffine([-45, 45], translate=(0.3, 0.3)),
         transforms.ToTensor()
@@ -145,6 +147,7 @@ def run_train_on_pretrained():
 
     batch_size = 15
     augmenter = transforms.Compose([
+        img_warp.SineWarp(10),
         transforms.ToPILImage(),
         transforms.RandomAffine([-45, 45], translate=(0.3, 0.3)),
         transforms.ToTensor()
@@ -225,6 +228,8 @@ def eval():
 
 
 if __name__ == '__main__':
-    #    run_train()
+    run_train()
     #    run_train_on_pretrained()
-    eval()
+    # eval()
+    # warp()
+
