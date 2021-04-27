@@ -6,13 +6,12 @@ from ventricle_segmentation_dataset import VentricleSegmentationDataset
 import matplotlib.pyplot as plt
 import torch.nn as nn
 import torch.optim as optim
-import numpy as np
 from torchvision import transforms
 import utils
 import os
 import pathlib
-# import img_warp
-import warp2
+import img_warp
+import numpy as np
 
 
 def calculate_loss(loader, model, criterion):
@@ -78,66 +77,39 @@ def split_data(ratio1, ratio2, data_x, data_y):
     return (train_x, train_y), (dev_x, dev_y), (test_x, test_y)
 
 
-def run_train():
-    path = sys.argv[1]
-    data_reader = DataReader(path)
+class Discriminator(nn.Module):
+    def __init__(self, channel_n, vendor_n):
+        super(Discriminator, self).__init__()
+        self.net = nn.Sequential(
+            self._block(1, channel_n, 4, 2, 1),
+            self._block(channel_n, channel_n * 2, 4, 2, 1),
+            self._block(channel_n * 2, channel_n * 4, 4, 2, 1),
+            self._block(channel_n * 4, channel_n * 8, 4, 2, 1),
+            self._block(channel_n * 8, channel_n * 12, 4, 2, 1),
+            self._block(channel_n * 12, channel_n * 15, 4, 2, 1),
+            nn.Linear(vendor_n, 480)
+        )
 
-    (x_train, y_train), (x_test, y_test), (_, _) = split_data(0.66, 0.99, data_reader.x, data_reader.y)
+    def _block(self, in_channels, out_channels, kernel_size, stride, padding):
+        return nn.Sequential(
+            nn.Conv2d(in_channels, out_channels, kernel_size, stride, padding),
+            nn.LeakyReLU(0.2)
+        )
 
-    batch_size = 15
-    augmenter = transforms.Compose([
-        warp2.ElasticTransform(),
-        transforms.ToPILImage(),
-        transforms.RandomAffine([-45, 45], translate=(0.3, 0.3)),
-        transforms.ToTensor()
-    ])
-    device = torch.device('cuda')
-    dataset_train = VentricleSegmentationDataset(x_train, y_train, device, augmenter)
-    loader_train = DataLoader(dataset_train, batch_size)
-    loader_train_accuracy = DataLoader(dataset_train, 1)
+    def forward(self, x):
+        s = self.net(x)
+        return s
 
-    dataset_dev = VentricleSegmentationDataset(x_test, y_test, device)
-    loader_dev = DataLoader(dataset_dev, batch_size)
-    loader_dev_accuracy = DataLoader(dataset_dev, 1)
 
-    model = nn.Sequential(
-        nn.Conv2d(in_channels=1, out_channels=3, kernel_size=(1, 1)),
-        nn.BatchNorm2d(3),
-        torch.hub.load('mateuszbuda/brain-segmentation-pytorch', 'unet', in_channels=3, out_channels=1,
-                       init_features=32, pretrained=True)
-    )
+def test():
+    device = torch.device('cpu')
+    discriminator = Discriminator(2, 2)
+    discriminator.to(device)
+    image_ = np.random.randn(1, 1, 256, 256)
+    img_tensor = torch.tensor(image_, dtype=torch.float, device=device)
+    r = discriminator(img_tensor)
 
-    epochs = 20
-    model.to(device)
-    criterion = nn.BCELoss()
-    optimizer = optim.AdamW(model.parameters(), lr=0.0005, weight_decay=0.1)
-    train_losses = []
-    dev_losses = []
-    for epoch in range(epochs):
-        train_loss = 0.0
-        for index, sample in enumerate(loader_train):
-            img = sample['image']
-            target = sample['target']
-            predicted = model(img)
-            loss = criterion(predicted, target)
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
-            train_loss += loss.cpu().detach().numpy()
-        train_losses.append(train_loss / len(loader_train))
-        dev_losses.append(calculate_loss(loader_dev, model, criterion))
-        utils.progress_bar(epoch + 1, epochs, 50, prefix='Training:')
-    plot_data(train_losses, 'train_losses', dev_losses, 'dev_losses', 'losses.png')
-    model_path = os.path.join(pathlib.Path(__file__).parent.absolute(), "pretrained_model.pth")
-    torch.save(model.state_dict(), model_path)
-    model.eval()
-    print("Train dice: ", calc_dice(model, loader_train_accuracy))
-    print("Test dice: ", calc_dice(model, loader_dev_accuracy))
-    pred_mask = torch.round(model(dataset_dev[0]['image'].unsqueeze(0))).cpu().detach().numpy().reshape(256, 256)
-    expected_mask = dataset_dev[0]['target'].cpu().detach().numpy().reshape(256, 256)
-    plt.imsave('mask.png', pred_mask)
-    plt.imsave('mask_expected.png', expected_mask)
-    plt.imsave('image.png', dataset_dev[0]['image'][0, :, :].cpu().detach().numpy().reshape(256, 256))
+
 
 
 def run_train_on_pretrained():
@@ -153,7 +125,7 @@ def run_train_on_pretrained():
         transforms.RandomAffine([-45, 45], translate=(0.3, 0.3)),
         transforms.ToTensor()
     ])
-    device = torch.device('cuda')
+    device = torch.device('cpu')
     dataset_train = VentricleSegmentationDataset(x_train, y_train, device, augmenter)
     loader_train = DataLoader(dataset_train, batch_size)
     loader_train_accuracy = DataLoader(dataset_train, 1)
@@ -204,33 +176,5 @@ def run_train_on_pretrained():
     plt.imsave('image.png', dataset_dev[0]['image'][0, :, :].cpu().detach().numpy().reshape(256, 256))
 
 
-def eval():
-    path = sys.argv[1]
-    data_reader = DataReader(path)
-    plt.imsave('mask.png', data_reader.y[0].reshape(256, 256))
-    plt.imsave('img.png', data_reader.x[0].reshape(256, 256))
-    device = torch.device('cuda')
-    dataset = VentricleSegmentationDataset(data_reader.x, data_reader.y, device)
-    loader_train_accuracy = DataLoader(dataset, 1)
-    print('Data len: ', len(dataset))
-    model = nn.Sequential(
-        nn.Conv2d(in_channels=1, out_channels=3, kernel_size=(1, 1)),
-        nn.BatchNorm2d(3),
-        torch.hub.load('mateuszbuda/brain-segmentation-pytorch', 'unet', in_channels=3, out_channels=1,
-                       init_features=32, pretrained=True)
-    )
-
-    state_d = torch.load(os.path.join(pathlib.Path(__file__).parent.absolute(), "trained_model.pth"))
-    model.load_state_dict(state_d)
-    model.to(device)
-    model.eval()
-
-    print("Dice: ", calc_dice(model, loader_train_accuracy))
-
-
 if __name__ == '__main__':
-    run_train()
-    #    run_train_on_pretrained()
-    # eval()
-    # warp()
-
+    test()
