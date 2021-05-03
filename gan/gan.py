@@ -103,7 +103,7 @@ class Discriminator(nn.Module):
 
 def test():
     device = torch.device('cpu')
-    discriminator = Discriminator(2, 2)
+    discriminator = Discriminator(2, 1)
     discriminator.to(device)
     image_ = np.random.randn(1, 1, 256, 256)
     img_tensor = torch.tensor(image_, dtype=torch.float, device=device)
@@ -144,11 +144,15 @@ def run_train_on_pretrained():
     model.load_state_dict(state_d)
 
     epochs = 30
+    discriminator = Discriminator(2, 1)
+    discriminator.to(device)
     model.to(device)
     criterion = nn.BCELoss()
     optimizer = optim.AdamW(model.parameters(), lr=0.0005, weight_decay=0.1)
+    d_optimizer = optim.AdamW(discriminator.parameters(), lr=0.0005, weight_decay=0.1)
     train_losses = []
     dev_losses = []
+    discriminator_losses = []
     for epoch in range(epochs):
         train_loss = 0.0
         for index, sample in enumerate(loader_train):
@@ -160,6 +164,9 @@ def run_train_on_pretrained():
             loss.backward()
             optimizer.step()
             train_loss += loss.cpu().detach().numpy()
+            predicted_vendor = discriminator(predicted)
+            discriminator_loss = criterion(predicted_vendor, sample['vendor'])
+            discriminator_loss.backward()
         train_losses.append(train_loss / len(loader_train))
         dev_losses.append(calculate_loss(loader_dev, model, criterion))
         utils.progress_bar(epoch + 1, epochs, 50, prefix='Training:')
