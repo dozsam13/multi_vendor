@@ -94,7 +94,7 @@ class Discriminator(nn.Module):
         #     self._block(channel_n * 12, channel_n * 15, 4, 2, 1),
         #     nn.Linear(vendor_n, 480)
         # )
-        self.conv1 = nn.Conv2d(in_channels=1, out_channels=3, kernel_size=(3, 3), stride=1)
+        self.conv1 = nn.Conv2d(in_channels=3, out_channels=3, kernel_size=(3, 3), stride=1)
         self.conv2 = nn.Conv2d(in_channels=3, out_channels=6, kernel_size=(2, 2), stride=1)
         self.conv3 = nn.Conv2d(in_channels=6, out_channels=9, kernel_size=(3, 3), stride=1)
         self.conv4 = nn.Conv2d(in_channels=9, out_channels=12, kernel_size=(2, 2), stride=1)
@@ -123,7 +123,7 @@ class Discriminator(nn.Module):
 
 
 def t():
-    device = torch.device('cpu')
+    device = torch.device('cuda')
     discriminator = Discriminator(2, 2)
     discriminator.to(device)
     image_ = np.random.randn(3, 1, 256, 256)
@@ -145,31 +145,42 @@ def train():
         transforms.RandomAffine([-45, 45], translate=(0.3, 0.3)),
         transforms.ToTensor()
     ])
-    device = torch.device('cpu')
+    device = torch.device('cuda')
     dataset_train = GanVentricleSegmentationDataset(x_train, y_train, vendor_train, device, augmenter)
     loader_train = DataLoader(dataset_train, batch_size)
     loader_train_accuracy = DataLoader(dataset_train, 1)
 
-    dataset_dev = GanVentricleSegmentationDataset(x_test, y_test, vendor_train, device)
+    dataset_dev = GanVentricleSegmentationDataset(x_test, y_test, vendor_test, device)
     loader_dev_accuracy = DataLoader(dataset_dev, 1)
+    pre_model = nn.Sequential(
+        nn.Conv2d(in_channels=1, out_channels=3, kernel_size=(3, 3), padding=2),
+        nn.Conv2d(in_channels=3, out_channels=3, kernel_size=(2, 2), padding=0),
+        nn.Conv2d(in_channels=3, out_channels=3, kernel_size=(2, 2), padding=0),
+    )
+
     model = nn.Sequential(
-        nn.Conv2d(in_channels=1, out_channels=3, kernel_size=(1, 1)),
+        pre_model,
         nn.BatchNorm2d(3),
         torch.hub.load('mateuszbuda/brain-segmentation-pytorch', 'unet', in_channels=3, out_channels=1,
                        init_features=32, pretrained=True)
     )
 
-    epochs = 1
-    discriminator = Discriminator(2, len(sources))
+    d_part = Discriminator(2, len(sources))
+    discriminator = nn.Sequential(
+        pre_model,
+        d_part
+    )
     discriminator.to(device)
     model.to(device)
     s_criterion = nn.BCELoss()
     d_criterion = nn.CrossEntropyLoss()
     s_optimizer = optim.AdamW(model.parameters(), lr=0.0005, weight_decay=0.1)
-    d_optimizer = optim.AdamW(discriminator.parameters(), lr=0.0005, weight_decay=0.1)
+    d_optimizer = optim.AdamW(d_part.parameters(), lr=0.0005, weight_decay=0.1)
+    p_optimizer = optim.AdamW(pre_model.parameters(), lr=0.0005, weight_decay=0.1)
     s_train_losses = []
     d_train_losses = []
 
+    epochs = 1
     for epoch in range(epochs):
         s_train_loss = 0.0
         d_train_loss = 0.0
@@ -179,23 +190,28 @@ def train():
             target_vendor = sample['vendor']
 
             predicted_mask = model(img)
-
-            predicted_vendor = discriminator(predicted_mask.detach())
-
-            d_loss = d_criterion(predicted_vendor, target_vendor)
-            d_optimizer.zero_grad()
-            d_loss.backward()
-            d_optimizer.step()
-            d_train_loss += d_loss.cpu().detach().numpy()
-
-            s_loss = s_criterion(predicted_mask, target_mask) - d_criterion(predicted_vendor, target_vendor)
+            s_loss = s_criterion(predicted_mask, target_mask)
             s_optimizer.zero_grad()
-            s_loss.backward(retain_graph=True)
+            s_loss.backward()
             s_optimizer.step()
             s_train_loss += s_loss.cpu().detach().numpy()
 
-        s_train_losses.append(s_train_loss)
-        d_train_losses.append(d_train_loss)
+            if epoch % 100 == 0:
+                predicted_vendor = discriminator(img)
+                d_loss = d_criterion(predicted_vendor, target_vendor)
+                d_optimizer.zero_grad()
+                d_loss.backward()
+                d_optimizer.step()
+                d_train_loss += d_loss.cpu().detach().numpy()
+
+                predicted_vendor = discriminator(img)
+                p_loss = -1*d_criterion(predicted_vendor, target_vendor)
+                p_optimizer.zero_grad()
+                p_loss.backward()
+                p_optimizer.step()
+
+                d_train_losses.append(d_train_loss)
+            s_train_losses.append(s_train_loss)
     print("Train dice: ", calc_dice(model, loader_train_accuracy))
     print("Test dice: ", calc_dice(model, loader_dev_accuracy))
 

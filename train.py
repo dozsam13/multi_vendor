@@ -11,7 +11,7 @@ from torchvision import transforms
 import utils
 import os
 import pathlib
-# import img_warp
+import img_warp
 import warp2
 
 
@@ -83,10 +83,11 @@ def run_train():
     data_reader = DataReader(path)
 
     (x_train, y_train), (x_test, y_test), (_, _) = split_data(0.66, 0.99, data_reader.x, data_reader.y)
-
+    print(len(x_train), len(x_test))
     batch_size = 15
     augmenter = transforms.Compose([
-        warp2.ElasticTransform(),
+    	#img_warp.SineWarp(10),
+        #warp2.ElasticTransform(),
         transforms.ToPILImage(),
         transforms.RandomAffine([-45, 45], translate=(0.3, 0.3)),
         transforms.ToTensor()
@@ -145,10 +146,11 @@ def run_train_on_pretrained():
     data_reader = DataReader(path)
 
     (x_train, y_train), (x_test, y_test), (_, _) = split_data(0.66, 0.99, data_reader.x, data_reader.y)
-
+    print(len(x_train))
     batch_size = 15
     augmenter = transforms.Compose([
-        img_warp.SineWarp(10),
+        #img_warp.SineWarp(10),
+        #warp2.ElasticTransform(),
         transforms.ToPILImage(),
         transforms.RandomAffine([-45, 45], translate=(0.3, 0.3)),
         transforms.ToTensor()
@@ -171,10 +173,10 @@ def run_train_on_pretrained():
     state_d = torch.load(os.path.join(pathlib.Path(__file__).parent.absolute(), "pretrained_model.pth"))
     model.load_state_dict(state_d)
 
-    epochs = 30
+    epochs = 20
     model.to(device)
     criterion = nn.BCELoss()
-    optimizer = optim.AdamW(model.parameters(), lr=0.0005, weight_decay=0.1)
+    optimizer = optim.AdamW(model.parameters(), lr=0.0005, weight_decay=0.0)
     train_losses = []
     dev_losses = []
     for epoch in range(epochs):
@@ -229,8 +231,8 @@ def eval():
 
 
 if __name__ == '__main__':
-    run_train()
-    #    run_train_on_pretrained()
-    # eval()
+    #run_train()
+    run_train_on_pretrained()
+    #eval()
     # warp()
 

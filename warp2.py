@@ -10,7 +10,7 @@ class ElasticTransform(object):
 
     def __call__(self, img):
         # source: https://gist.github.com/fmder/e28813c1e8721830ff9c
-        random_state = np.random.RandomState(seed=seed)
+        random_state = np.random.RandomState()
 
         if torch.is_tensor(img):
             img = img.numpy()
