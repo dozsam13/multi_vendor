@@ -30,10 +30,10 @@ def calculate_loss(loader, model, criterion):
     return loss_sum / len(loader)
 
 
-def plot_data(data1, label1, data2, label2, filename):
+def plot_data(data_with_label, filename):
     plt.clf()
-    plt.plot(data1, label=label1)
-    plt.plot(data2, label=label2)
+    for (data, label) in data_with_label:
+        plt.plot(data, label=label)
     plt.legend()
     plt.savefig(filename)
 
@@ -122,25 +122,51 @@ class Discriminator(nn.Module):
         return self.linear(temp)
 
 
-def t():
+pre_model = nn.Sequential(
+    nn.Conv2d(in_channels=1, out_channels=3, kernel_size=(3, 3), padding=2),
+    nn.BatchNorm2d(3),
+    nn.ReLU(),
+    nn.Conv2d(in_channels=3, out_channels=3, kernel_size=(2, 2), padding=0),
+    nn.BatchNorm2d(3),
+    nn.ReLU(),
+    nn.Conv2d(in_channels=3, out_channels=3, kernel_size=(2, 2), padding=0),
+    nn.BatchNorm2d(3),
+    nn.ReLU(),
+)
+
+
+def eval(eval_sources):
     device = torch.device('cuda')
-    discriminator = Discriminator(2, 2)
-    discriminator.to(device)
-    image_ = np.random.randn(3, 1, 256, 256)
-    img_tensor = torch.tensor(image_, dtype=torch.float, device=device)
-    r = discriminator(img_tensor)
-    print(r.shape)
+    path = sys.argv[1]
+    data_reader = GanDataReader(path, eval_sources)
+    print(len(data_reader.x))
+    dataset = GanVentricleSegmentationDataset(data_reader.x, data_reader.y, data_reader.vendor, device)
+    loader_train_accuracy = DataLoader(dataset, 1)
+
+    model = nn.Sequential(
+        pre_model,
+        torch.hub.load('mateuszbuda/brain-segmentation-pytorch', 'unet', in_channels=3, out_channels=1,
+                       init_features=32, pretrained=True)
+    )
+
+    state_d = torch.load(os.path.join(pathlib.Path(__file__).parent.absolute(), "adversial_trained_model.pth"))
+    model.load_state_dict(state_d)
+    model.to(device)
+    model.eval()
+
+    print("Dice: ", calc_dice(model, loader_train_accuracy))
 
 
-def train():
-    sources = [etlstream.Origin.SB, etlstream.Origin.MC7]
+def train(sources):
     path = sys.argv[1]
     data_reader = GanDataReader(path, sources)
 
-    (x_train, y_train, vendor_train), (x_test, y_test, vendor_test), (_, _, _) = split_data(0.1, 0.2, data_reader.x, data_reader.y, data_reader.vendor)
+    (x_train, y_train, vendor_train), (x_test, y_test, vendor_test), (_, _, _) = split_data(0.66, 0.99, data_reader.x,
+                                                                                            data_reader.y,
+                                                                                            data_reader.vendor)
+    print(len(x_train), len(x_test))
     batch_size = 15
     augmenter = transforms.Compose([
-        img_warp.SineWarp(10),
         transforms.ToPILImage(),
         transforms.RandomAffine([-45, 45], translate=(0.3, 0.3)),
         transforms.ToTensor()
@@ -151,16 +177,11 @@ def train():
     loader_train_accuracy = DataLoader(dataset_train, 1)
 
     dataset_dev = GanVentricleSegmentationDataset(x_test, y_test, vendor_test, device)
+    loader_dev = DataLoader(dataset_dev, batch_size)
     loader_dev_accuracy = DataLoader(dataset_dev, 1)
-    pre_model = nn.Sequential(
-        nn.Conv2d(in_channels=1, out_channels=3, kernel_size=(3, 3), padding=2),
-        nn.Conv2d(in_channels=3, out_channels=3, kernel_size=(2, 2), padding=0),
-        nn.Conv2d(in_channels=3, out_channels=3, kernel_size=(2, 2), padding=0),
-    )
 
     model = nn.Sequential(
         pre_model,
-        nn.BatchNorm2d(3),
         torch.hub.load('mateuszbuda/brain-segmentation-pytorch', 'unet', in_channels=3, out_channels=1,
                        init_features=32, pretrained=True)
     )
@@ -174,13 +195,14 @@ def train():
     model.to(device)
     s_criterion = nn.BCELoss()
     d_criterion = nn.CrossEntropyLoss()
-    s_optimizer = optim.AdamW(model.parameters(), lr=0.0005, weight_decay=0.1)
+    s_optimizer = optim.AdamW(model.parameters(), lr=0.0005, weight_decay=0.0)
     d_optimizer = optim.AdamW(d_part.parameters(), lr=0.0005, weight_decay=0.1)
-    p_optimizer = optim.AdamW(pre_model.parameters(), lr=0.0005, weight_decay=0.1)
+    p_optimizer = optim.AdamW(pre_model.parameters(), lr=0.003, weight_decay=0.1)
     s_train_losses = []
+    s_dev_losses = []
     d_train_losses = []
 
-    epochs = 1
+    epochs = 10
     for epoch in range(epochs):
         s_train_loss = 0.0
         d_train_loss = 0.0
@@ -189,14 +211,15 @@ def train():
             target_mask = sample['target']
             target_vendor = sample['vendor']
 
-            predicted_mask = model(img)
-            s_loss = s_criterion(predicted_mask, target_mask)
-            s_optimizer.zero_grad()
-            s_loss.backward()
-            s_optimizer.step()
-            s_train_loss += s_loss.cpu().detach().numpy()
+            if epoch < 5 or epoch > 6:
+                predicted_mask = model(img)
+                s_loss = s_criterion(predicted_mask, target_mask)
+                s_optimizer.zero_grad()
+                s_loss.backward()
+                s_optimizer.step()
+                s_train_loss += s_loss.cpu().detach().numpy()
 
-            if epoch % 100 == 0:
+            if epoch > 4 and epoch < 7:
                 predicted_vendor = discriminator(img)
                 d_loss = d_criterion(predicted_vendor, target_vendor)
                 d_optimizer.zero_grad()
@@ -205,34 +228,27 @@ def train():
                 d_train_loss += d_loss.cpu().detach().numpy()
 
                 predicted_vendor = discriminator(img)
-                p_loss = -1*d_criterion(predicted_vendor, target_vendor)
+                p_loss = -1 * d_criterion(predicted_vendor, target_vendor)
                 p_optimizer.zero_grad()
                 p_loss.backward()
                 p_optimizer.step()
 
-                d_train_losses.append(d_train_loss)
-            s_train_losses.append(s_train_loss)
+        d_train_losses.append(d_train_loss)
+        s_train_losses.append(s_train_loss)
+        s_dev_losses.append(calculate_loss(loader_dev, model, s_criterion))
+        utils.progress_bar(epoch + 1, epochs, 50, prefix='Training:')
+    plot_data([(s_train_losses, 'train_losses'), (s_dev_losses, 'dev_losses'), (d_train_losses, 'discriminator')],
+              'losses.png')
     print("Train dice: ", calc_dice(model, loader_train_accuracy))
     print("Test dice: ", calc_dice(model, loader_dev_accuracy))
 
-
-
-    #     train_losses.append(train_loss / len(loader_train))
-    #     dev_losses.append(calculate_loss(loader_dev, model, criterion))
-    #     utils.progress_bar(epoch + 1, epochs, 50, prefix='Training:')
-    # plot_data(train_losses, 'train_losses', dev_losses, 'dev_losses', 'losses.png')
-    # model.eval()
-    # model_path = os.path.join(pathlib.Path(__file__).parent.absolute(), "trained_model.pth")
-    # torch.save(model.state_dict(), model_path)
-    # print("Train dice: ", calc_dice(model, loader_train_accuracy))
-    # print("Test dice: ", calc_dice(model, loader_dev_accuracy))
-    # pred_mask = torch.round(model(dataset_dev[0]['image'].unsqueeze(0))).cpu().detach().numpy().reshape(256, 256)
-    # expected_mask = dataset_dev[0]['target'].cpu().detach().numpy().reshape(256, 256)
-    # plt.imsave('mask.png', pred_mask)
-    # plt.imsave('mask_expected.png', expected_mask)
-    # plt.imsave('image.png', dataset_dev[0]['image'][0, :, :].cpu().detach().numpy().reshape(256, 256))
+    model_path = os.path.join(pathlib.Path(__file__).parent.absolute(), "adversial_trained_model.pth")
+    torch.save(model.state_dict(), model_path)
 
 
 if __name__ == '__main__':
-    #t()
-    train()
+    train_sources = [etlstream.Origin.SB, etlstream.Origin.ST11]
+    eval_source = [etlstream.Origin.MC7]
+
+    train(train_sources)
+    eval(eval_source)

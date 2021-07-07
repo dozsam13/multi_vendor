@@ -59,6 +59,10 @@ def calc_dice_for_img(predicted, target):
     return (2. * intersection + smooth) / (np.sum(pred_flat) + np.sum(target_flat) + smooth)
 
 
+def flatten(t):
+    return [item for sublist in t for item in sublist]
+
+
 def split_data(ratio1, ratio2, data_x, data_y):
     n = len(data_x)
     test_x = data_x[int(n * ratio2):]
@@ -75,7 +79,7 @@ def split_data(ratio1, ratio2, data_x, data_y):
     dev_x = [data_dev_train_x[idx] for idx in dev_indices]
     dev_y = [data_dev_train_y[idx] for idx in dev_indices]
 
-    return (train_x, train_y), (dev_x, dev_y), (test_x, test_y)
+    return (flatten(train_x), flatten(train_y)), (flatten(dev_x), flatten(dev_y)), (flatten(test_x, test_y))
 
 
 def run_train():
