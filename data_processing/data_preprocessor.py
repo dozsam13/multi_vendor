@@ -5,9 +5,8 @@ import sys
 import cv2
 import numpy as np
 
-import etlstream
-import patient
-from etlstream import StreamFactory
+from data_processing import etlstream, patient
+from data_processing.etlstream import StreamFactory
 
 
 def run_prerocess(origin, filled):
@@ -51,4 +50,4 @@ def run_prerocess(origin, filled):
 
 
 if __name__ == "__main__":
-    run_prerocess(etlstream.Origin.MC7, True)
+    run_prerocess(etlstream.Origin.SB, True)

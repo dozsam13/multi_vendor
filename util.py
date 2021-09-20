@@ -1,5 +1,6 @@
 import logging
 import pathlib
+import matplotlib.pyplot as plt
 
 DB_PATH = pathlib.Path(__file__).parent.absolute()
 
@@ -16,3 +17,11 @@ def progress_bar(iteration, total, length=100, prefix='Progress:', suffix='Compl
     # Print New Line on Complete
     if iteration == total:
         print()
+
+
+def plot_data(data1, label1, data2, label2, filename):
+    plt.clf()
+    plt.plot(data1, label=label1)
+    plt.plot(data2, label=label2)
+    plt.legend()
+    plt.savefig(filename)

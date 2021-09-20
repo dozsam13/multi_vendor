@@ -1,33 +1,17 @@
-from gan.data_reader import GanDataReader
+from data_processing.adversarial.data_reader import GanDataReader
 from torch.utils.data import DataLoader
 import sys
 import torch
-from gan.ventricle_segmentation_dataset import GanVentricleSegmentationDataset
+from data_processing.adversarial.ventricle_segmentation_dataset import GanVentricleSegmentationDataset
 import matplotlib.pyplot as plt
 import torch.nn as nn
 import torch.optim as optim
 from torchvision import transforms
-import utils
+import util
 import os
 import pathlib
-import img_warp
 import numpy as np
-import etlstream
-
-
-def calculate_loss(loader, model, criterion):
-    loss_sum = 0.0
-    for sample in loader:
-        image = sample['image']
-        target = sample['target']
-
-        predicted = model(image)
-
-        loss = criterion(predicted, target)
-        loss_sum += loss.cpu().detach().numpy()
-        del loss
-
-    return loss_sum / len(loader)
+from data_processing import etlstream
 
 
 def plot_data(data_with_label, filename):
@@ -36,27 +20,6 @@ def plot_data(data_with_label, filename):
         plt.plot(data, label=label)
     plt.legend()
     plt.savefig(filename)
-
-
-def calc_dice(model, loader_dev):
-    s = 0
-    for sample in loader_dev:
-        img = sample['image']
-        target = sample['target'].cpu().detach().numpy()
-        predicted = model(img)
-        predicted = torch.round(predicted).cpu().detach().numpy()
-        s += calc_dice_for_img(predicted, target)
-    return s / len(loader_dev)
-
-
-def calc_dice_for_img(predicted, target):
-    smooth = 1.
-
-    pred_flat = predicted.reshape(-1)
-    target_flat = target.reshape(-1)
-    intersection = np.dot(pred_flat, target_flat)
-
-    return (2. * intersection + smooth) / (np.sum(pred_flat) + np.sum(target_flat) + smooth)
 
 
 def split_data(ratio1, ratio2, data_x, data_y, data_vendor):
@@ -80,59 +43,6 @@ def split_data(ratio1, ratio2, data_x, data_y, data_vendor):
     dev_vendor = [data_dev_train_vendor[idx] for idx in dev_indices]
 
     return (train_x, train_y, train_vendor), (dev_x, dev_y, dev_vendor), (test_x, test_y, test_vendor)
-
-
-class Discriminator(nn.Module):
-    def __init__(self, channel_n, vendor_n):
-        super(Discriminator, self).__init__()
-        # self.net = nn.Sequential(
-        #     self._block(1, channel_n, 4, 2, 1),
-        #     self._block(channel_n, channel_n * 2, 4, 2, 1),
-        #     self._block(channel_n * 2, channel_n * 4, 4, 2, 1),
-        #     self._block(channel_n * 4, channel_n * 8, 4, 2, 1),
-        #     self._block(channel_n * 8, channel_n * 12, 4, 2, 1),
-        #     self._block(channel_n * 12, channel_n * 15, 4, 2, 1),
-        #     nn.Linear(vendor_n, 480)
-        # )
-        self.conv1 = nn.Conv2d(in_channels=3, out_channels=3, kernel_size=(3, 3), stride=1)
-        self.conv2 = nn.Conv2d(in_channels=3, out_channels=6, kernel_size=(2, 2), stride=1)
-        self.conv3 = nn.Conv2d(in_channels=6, out_channels=9, kernel_size=(3, 3), stride=1)
-        self.conv4 = nn.Conv2d(in_channels=9, out_channels=12, kernel_size=(2, 2), stride=1)
-        self.conv5 = nn.Conv2d(in_channels=12, out_channels=13, kernel_size=(3, 3), stride=1)
-        self.linear = nn.Linear(468, vendor_n)
-        self.maxpool_2_2 = nn.MaxPool2d(kernel_size=(2, 2), stride=2)
-
-        self.relu = nn.ReLU()
-
-    # def _block(self, in_channels, out_channels, kernel_size, stride, padding):
-    #     return nn.Sequential(
-    #         nn.Conv2d(in_channels, out_channels, kernel_size, stride, padding),
-    #         nn.LeakyReLU(0.2)
-    #     )
-
-    def forward(self, x):
-        # s = self.net(x)
-        temp = self.maxpool_2_2(self.relu(self.conv1(x)))
-        temp = self.maxpool_2_2(self.relu(self.conv2(temp)))
-        temp = self.maxpool_2_2(self.relu(self.conv3(temp)))
-        temp = self.maxpool_2_2(self.relu(self.conv4(temp)))
-        temp = self.maxpool_2_2(self.relu(self.conv5(temp)))
-        temp = temp.view(-1, 468)
-
-        return self.linear(temp)
-
-
-pre_model = nn.Sequential(
-    nn.Conv2d(in_channels=1, out_channels=3, kernel_size=(3, 3), padding=2),
-    nn.BatchNorm2d(3),
-    nn.ReLU(),
-    nn.Conv2d(in_channels=3, out_channels=3, kernel_size=(2, 2), padding=0),
-    nn.BatchNorm2d(3),
-    nn.ReLU(),
-    nn.Conv2d(in_channels=3, out_channels=3, kernel_size=(2, 2), padding=0),
-    nn.BatchNorm2d(3),
-    nn.ReLU(),
-)
 
 
 def eval(eval_sources):
@@ -236,7 +146,7 @@ def train(sources):
         d_train_losses.append(d_train_loss)
         s_train_losses.append(s_train_loss)
         s_dev_losses.append(calculate_loss(loader_dev, model, s_criterion))
-        utils.progress_bar(epoch + 1, epochs, 50, prefix='Training:')
+        util.progress_bar(epoch + 1, epochs, 50, prefix='Training:')
     plot_data([(s_train_losses, 'train_losses'), (s_dev_losses, 'dev_losses'), (d_train_losses, 'discriminator')],
               'losses.png')
     print("Train dice: ", calc_dice(model, loader_train_accuracy))

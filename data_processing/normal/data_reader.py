@@ -1,17 +1,9 @@
 import os
 import pickle
-
 import numpy as np
 
 
 class DataReader:
-
-    def f(self, a, patient_file_path):
-        if not a.shape == (256, 256):
-            print(a.shape)
-            print(patient_file_path)
-        return a.reshape(256, 256, 1)
-
     def __init__(self, path):
         patient_file_paths = list(map(lambda f: os.path.join(path, f), os.listdir(path)))
         self.x = []
@@ -23,6 +15,7 @@ class DataReader:
             with (open(patient_file_path, "rb")) as patient_file:
                 while True:
                     try:
+
                         patient_data = pickle.load(patient_file)
                         for ind, (img, cnt) in enumerate(zip(patient_data.images, patient_data.contours)):
                             result_img = np.zeros((256, 256))
