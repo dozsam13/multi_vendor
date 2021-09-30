@@ -4,7 +4,7 @@ from torchvision import transforms
 import numpy as np
 
 
-class GanVentricleSegmentationDataset(Dataset):
+class MultiSourceDataset(Dataset):
     default_augmenter = transforms.Compose([
         transforms.ToPILImage(),
         transforms.ToTensor()

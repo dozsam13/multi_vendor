@@ -8,7 +8,7 @@ def calculate_loss(loader, model, criterion):
         image = sample['image']
         target = sample['target']
 
-        predicted = model(image)
+        predicted = model(image)[0]
 
         loss = criterion(predicted, target)
         loss_sum += loss.cpu().detach().numpy()
@@ -22,7 +22,7 @@ def calculate_dice(model, data_loader):
     for sample in data_loader:
         img = sample['image']
         target = sample['target'].cpu().detach().numpy()
-        predicted = model(img)
+        predicted = model(img)[0]
         predicted = torch.round(predicted).cpu().detach().numpy()
         s += calc_dice_for_img(predicted, target)
     return s / len(data_loader)

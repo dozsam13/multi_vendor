@@ -2,9 +2,10 @@ import os
 import pickle
 from data_processing import etlstream
 import numpy as np
+import random
 
 
-class GanDataReader:
+class MultiSourceDataReader:
     vendors = {etlstream.Origin.SB: 'SB', etlstream.Origin.MC7: 'MC7', etlstream.Origin.ST11: 'ST11'}
 
     def __init__(self, path, sources):
@@ -15,7 +16,7 @@ class GanDataReader:
             current_x = []
             current_y = []
             current_vendor = []
-            p = os.path.join(path, GanDataReader.vendors[source])
+            p = os.path.join(path, MultiSourceDataReader.vendors[source])
             patient_file_paths = list(map(lambda f: os.path.join(p, f), os.listdir(p)))
             for patient_file_path in patient_file_paths:
                 with (open(patient_file_path, "rb")) as patient_file:
@@ -34,6 +35,11 @@ class GanDataReader:
                                 current_vendor.append(source_index)
                         except EOFError:
                             break
+            if len(current_x) > 15:
+                l = random.sample(list(zip(current_x, current_y, current_vendor)), 15)
+                current_x = list(map(lambda e: e[0], l))
+                current_y = list(map(lambda e: e[1], l))
+                current_vendor = list(map(lambda e: e[2], l))
             self.x.append(current_x)
             self.y.append(current_y)
             self.vendor.append(current_vendor)

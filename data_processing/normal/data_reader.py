@@ -1,7 +1,7 @@
 import os
 import pickle
 import numpy as np
-
+import random
 
 class DataReader:
     def __init__(self, path):
@@ -28,5 +28,9 @@ class DataReader:
                             current_y.append(result_cnt.reshape(256, 256, 1) / 255.0)
                     except EOFError:
                         break
+            if len(current_x) > 15:
+                l = random.sample(list(zip(current_x, current_y)), 15)
+                current_x = list(map(lambda e: e[0], l))
+                current_y = list(map(lambda e: e[1], l))
             self.x.append(current_x)
             self.y.append(current_y)
