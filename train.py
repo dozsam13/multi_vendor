@@ -82,7 +82,7 @@ def run_train(run_on_pretrained, path):
         for index, sample in enumerate(loader_train):
             img = sample['image']
             target = sample['target']
-            predicted = model(img)[0]
+            predicted = model(img)
             loss = criterion(predicted, target)
             optimizer.zero_grad()
             loss.backward()
@@ -107,7 +107,7 @@ def run_train(run_on_pretrained, path):
     model.eval()
     print("Train dice: ", calculate_dice(model, loader_train_accuracy))
     print("Test dice: ", calculate_dice(model, loader_dev_accuracy))
-    pred_mask = torch.round(model(dataset_dev[0]['image'].unsqueeze(0))[0]).cpu().detach().numpy().reshape(256, 256)
+    pred_mask = torch.round(model(dataset_dev[0]['image'].unsqueeze(0))).cpu().detach().numpy().reshape(256, 256)
     expected_mask = dataset_dev[0]['target'].cpu().detach().numpy().reshape(256, 256)
     plt.imsave('mask.png', pred_mask)
     plt.imsave('mask_expected.png', expected_mask)

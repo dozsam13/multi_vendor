@@ -18,6 +18,7 @@ from model.unet import UNet
 from train_util import Selector
 import random
 import gc
+from datetime import datetime
 
 
 def plot_data(data_with_label, filename):
@@ -111,7 +112,7 @@ def train(sources):
     s_train_losses = []
     s_dev_losses = []
     d_train_losses = []
-
+    start = datetime.now()
     epochs = 1
     for epoch in range(epochs):
         s_train_loss = 0.0
@@ -154,7 +155,7 @@ def train(sources):
         d_train_losses.append(d_train_loss)
         s_train_losses.append(s_train_loss)
         s_dev_losses.append(calculate_loss(loader_dev, nn.Sequential(segmentator, selector, sigmoid), s_criterion))
-        util.progress_bar(epoch + 1, epochs, 50, prefix='Training:')
+        util.progress_bar_with_time(epoch + 1, epochs, start_time)
     plot_data([(s_train_losses, 'train_losses'), (s_dev_losses, 'dev_losses'), (d_train_losses, 'discriminator_losses')],
               'losses.png')
     print("Train dice: ", calculate_dice(nn.Sequential(segmentator, selector, sigmoid), loader_train_accuracy))
