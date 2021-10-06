@@ -15,6 +15,8 @@ from model.unet import UNet
 from train_util import *
 import random
 import gc
+from datetime import datetime
+from train_util import Selector
 
 
 def split_data(ratio1, ratio2, data_x, data_y):
@@ -58,7 +60,7 @@ def run_train(run_on_pretrained, path):
     loader_dev = DataLoader(dataset_dev, batch_size)
     loader_dev_accuracy = DataLoader(dataset_dev, 1)
 
-    model = nn.Sequential(UNet(), nn.Sigmoid())
+    model = nn.Sequential(UNet(), Selector(), nn.Sigmoid())
 
     if run_on_pretrained:
         state_d = torch.load(os.path.join(pathlib.Path(__file__).parent.absolute(), "pretrained_model.pth"))
@@ -74,6 +76,7 @@ def run_train(run_on_pretrained, path):
     train_dices = []
     dev_dices = []
     calc_dice = False
+    start_time = datetime.now()
     for epoch in range(epochs):
         train_loss = 0.0
         for index, sample in enumerate(loader_train):
@@ -92,7 +95,7 @@ def run_train(run_on_pretrained, path):
             dev_dices.append(calculate_dice(model, loader_dev_accuracy))
         train_losses.append(train_loss / len(loader_train))
         dev_losses.append(calculate_loss(loader_dev, model, criterion))
-        util.progress_bar(epoch + 1, epochs, 50, prefix='Training:')
+        util.progress_bar_with_time(epoch + 1, epochs, start_time)
         model.train()
     util.plot_data(train_losses, 'train_losses', dev_losses, 'dev_losses', 'losses.png')
     util.plot_data(train_dices, 'train_dices', dev_dices, 'dev_dices', 'dices.png')

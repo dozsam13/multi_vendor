@@ -15,6 +15,9 @@ from data_processing import etlstream
 from train_util import *
 from model.discriminator import Discriminator
 from model.unet import UNet
+from train_util import Selector
+import random
+import gc
 
 
 def plot_data(data_with_label, filename):
@@ -55,7 +58,7 @@ def eval(eval_sources):
     dataset = MultiSourceDataset(data_reader.x, data_reader.y, data_reader.vendor, device)
     loader_train_accuracy = DataLoader(dataset, 1)
 
-    model = UNet()
+    model = nn.Sequential(UNet(), Selector(), nn.Sigmoid())
 
     state_d = torch.load(os.path.join(pathlib.Path(__file__).parent.absolute(), "adversial_trained_model.pth"))
     model.load_state_dict(state_d)
@@ -69,28 +72,34 @@ def train(sources):
     path = sys.argv[1]
     data_reader = MultiSourceDataReader(path, sources)
 
-    (x_train, y_train, vendor_train), (x_test, y_test, vendor_test), (_, _, _) = split_data(0.66, 0.99, data_reader.x,
+    (x_train, y_train, vendor_train), (x_dev, y_dev, vendor_dev), (_, _, _) = split_data(0.1, 0.2, data_reader.x,
                                                                                             data_reader.y,
                                                                                             data_reader.vendor)
-    print(len(x_train), len(x_test))
+    print(len(x_train), len(x_dev))
     batch_size = 5
     augmenter = transforms.Compose([
         transforms.ToPILImage(),
         transforms.RandomAffine([-45, 45], translate=(0.3, 0.3)),
         transforms.ToTensor()
     ])
-    device = torch.device('cuda')
+    device = torch.device('cpu')
+    if torch.cuda.is_available():
+        device = torch.device('cuda')
+
     dataset_train = MultiSourceDataset(x_train, y_train, vendor_train, device, augmenter)
     loader_train = DataLoader(dataset_train, batch_size)
     loader_train_accuracy = DataLoader(dataset_train, 1)
 
-    dataset_dev = MultiSourceDataset(x_test, y_test, vendor_test, device)
+    dataset_dev = MultiSourceDataset(x_dev, y_dev, vendor_dev, device)
     loader_dev = DataLoader(dataset_dev, batch_size)
     loader_dev_accuracy = DataLoader(dataset_dev, 1)
 
     segmentator = UNet()
 
-    discriminator = Discriminator(n_domains=2)
+    discriminator = Discriminator(n_domains=len(sources))
+
+    sigmoid = nn.Sigmoid()
+    selector = Selector()
 
     discriminator.to(device)
     segmentator.to(device)
@@ -103,7 +112,7 @@ def train(sources):
     s_dev_losses = []
     d_train_losses = []
 
-    epochs = 10
+    epochs = 1
     for epoch in range(epochs):
         s_train_loss = 0.0
         d_train_loss = 0.0
@@ -113,7 +122,8 @@ def train(sources):
             target_vendor = sample['vendor']
 
             # segmentator
-            predicted_mask, inner_repr = segmentator(img)[0]
+            predicted_mask, inner_repr = segmentator(img)
+            predicted_mask = sigmoid(predicted_mask)
             s_loss = s_criterion(predicted_mask, target_mask)
             s_optimizer.zero_grad()
             s_loss.backward()
@@ -121,6 +131,10 @@ def train(sources):
             s_train_loss += s_loss.cpu().detach().numpy()
 
             # discriminator
+            predicted_mask = predicted_mask.cpu().detach()
+            inner_repr = inner_repr.cpu().detach()
+            predicted_mask.to(device)
+            inner_repr.to(device)
             predicted_vendor = discriminator(predicted_mask, inner_repr)
             d_loss = d_criterion(predicted_vendor, target_vendor)
             d_optimizer.zero_grad()
@@ -139,20 +153,28 @@ def train(sources):
         ###########################################
         d_train_losses.append(d_train_loss)
         s_train_losses.append(s_train_loss)
-        s_dev_losses.append(calculate_loss(loader_dev, segmentator, s_criterion))
+        s_dev_losses.append(calculate_loss(loader_dev, nn.Sequential(segmentator, selector, sigmoid), s_criterion))
         util.progress_bar(epoch + 1, epochs, 50, prefix='Training:')
-    plot_data([(s_train_losses, 'train_losses'), (s_dev_losses, 'dev_losses'), (d_train_losses, 'discriminator')],
+    plot_data([(s_train_losses, 'train_losses'), (s_dev_losses, 'dev_losses'), (d_train_losses, 'discriminator_losses')],
               'losses.png')
-    print("Train dice: ", calculate_dice(segmentator, loader_train_accuracy))
-    print("Test dice: ", calculate_dice(segmentator, loader_dev_accuracy))
+    print("Train dice: ", calculate_dice(nn.Sequential(segmentator, selector, sigmoid), loader_train_accuracy))
+    print("Test dice: ", calculate_dice(nn.Sequential(segmentator, selector, sigmoid), loader_dev_accuracy))
 
     model_path = os.path.join(pathlib.Path(__file__).parent.absolute(), "adversial_trained_model.pth")
     torch.save(segmentator.state_dict(), model_path)
 
 
 if __name__ == '__main__':
-    train_sources = [etlstream.Origin.SB, etlstream.Origin.ST11]
-    eval_source = [etlstream.Origin.MC7]
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+    np.random.seed(234)
+    torch.manual_seed(234)
+    random.seed(234)
+    torch.cuda.empty_cache()
+    gc.collect()
+
+    train_sources = [etlstream.Origin.SB, etlstream.Origin.MC7]
+    eval_source = [etlstream.Origin.ST11]
 
     train(train_sources)
-    eval(eval_source)
+    #eval(eval_source)

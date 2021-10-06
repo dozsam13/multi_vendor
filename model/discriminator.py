@@ -24,7 +24,7 @@ class Discriminator(nn.Module):
 
 
 class View(nn.Module):
-    def __init(self, shape):
+    def __init__(self, shape):
         super().__init__()
         self.shape = shape
 

@@ -1,5 +1,6 @@
 import torch
 import numpy as np
+import torch.nn as nn
 
 
 def calculate_loss(loader, model, criterion):
@@ -8,7 +9,7 @@ def calculate_loss(loader, model, criterion):
         image = sample['image']
         target = sample['target']
 
-        predicted = model(image)[0]
+        predicted = model(image)
 
         loss = criterion(predicted, target)
         loss_sum += loss.cpu().detach().numpy()
@@ -22,7 +23,7 @@ def calculate_dice(model, data_loader):
     for sample in data_loader:
         img = sample['image']
         target = sample['target'].cpu().detach().numpy()
-        predicted = model(img)[0]
+        predicted = model(img)
         predicted = torch.round(predicted).cpu().detach().numpy()
         s += calc_dice_for_img(predicted, target)
     return s / len(data_loader)
@@ -40,3 +41,11 @@ def calc_dice_for_img(predicted, target):
 
 def flatten(t):
     return [item for sublist in t for item in sublist]
+
+
+class Selector(nn.Module):
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, input):
+        return input[0]

@@ -5,7 +5,8 @@ import sys
 import cv2
 import numpy as np
 
-from data_processing import etlstream, patient
+from data_processing import etlstream
+import patient
 from data_processing.etlstream import StreamFactory
 
 

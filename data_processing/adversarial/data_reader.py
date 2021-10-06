@@ -35,11 +35,11 @@ class MultiSourceDataReader:
                                 current_vendor.append(source_index)
                         except EOFError:
                             break
-            if len(current_x) > 15:
-                l = random.sample(list(zip(current_x, current_y, current_vendor)), 15)
-                current_x = list(map(lambda e: e[0], l))
-                current_y = list(map(lambda e: e[1], l))
-                current_vendor = list(map(lambda e: e[2], l))
-            self.x.append(current_x)
-            self.y.append(current_y)
-            self.vendor.append(current_vendor)
+                if len(current_x) > 15:
+                    l = random.sample(list(zip(current_x, current_y, current_vendor)), 15)
+                    current_x = list(map(lambda e: e[0], l))
+                    current_y = list(map(lambda e: e[1], l))
+                    current_vendor = list(map(lambda e: e[2], l))
+                self.x.append(current_x)
+                self.y.append(current_y)
+                self.vendor.append(current_vendor)
