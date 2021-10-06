@@ -3,19 +3,20 @@ import pickle
 import numpy as np
 import random
 
+
 class DataReader:
     def __init__(self, path):
         patient_file_paths = list(map(lambda f: os.path.join(path, f), os.listdir(path)))
         self.x = []
         self.y = []
-
+        self.size_dict = {}
+        self.vertical_resolution = {}
         for patient_file_path in patient_file_paths:
             current_x = []
             current_y = []
             with (open(patient_file_path, "rb")) as patient_file:
                 while True:
                     try:
-
                         patient_data = pickle.load(patient_file)
                         for ind, (img, cnt) in enumerate(zip(patient_data.images, patient_data.contours)):
                             result_img = np.zeros((256, 256))
@@ -28,6 +29,10 @@ class DataReader:
                             current_y.append(result_cnt.reshape(256, 256, 1) / 255.0)
                     except EOFError:
                         break
+            if len(current_x) in self.vertical_resolution.keys():
+                self.vertical_resolution[len(current_x)] += 1
+            else:
+                self.vertical_resolution[len(current_x)] = 1
             if len(current_x) > 15:
                 l = random.sample(list(zip(current_x, current_y)), 15)
                 current_x = list(map(lambda e: e[0], l))

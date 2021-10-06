@@ -112,7 +112,7 @@ def train(sources):
     s_train_losses = []
     s_dev_losses = []
     d_train_losses = []
-    start = datetime.now()
+    start_time = datetime.now()
     epochs = 1
     for epoch in range(epochs):
         s_train_loss = 0.0

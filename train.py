@@ -52,6 +52,9 @@ def run_train(run_on_pretrained, path):
         transforms.ToTensor()
     ])
     device = torch.device('cpu')
+    if torch.cuda.is_available():
+        device = torch.device('cuda')
+
     dataset_train = VentricleSegmentationDataset(x_train, y_train, device, augmenter)
     loader_train = DataLoader(dataset_train, batch_size)
     loader_train_accuracy = DataLoader(dataset_train, 1)
