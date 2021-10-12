@@ -17,6 +17,7 @@ import random
 import gc
 from datetime import datetime
 from train_util import Selector
+from train_util import DiceLoss
 
 
 def split_data(ratio1, ratio2, data_x, data_y):
@@ -71,9 +72,9 @@ def run_train(run_on_pretrained, path):
     model.eval()
     model.to(device)
 
-    criterion = nn.BCELoss()
+    criterion = DiceLoss()
     optimizer = optim.AdamW(model.parameters(), lr=0.0005, weight_decay=0.01)
-    epochs = 90
+    epochs = 2
     train_losses = []
     dev_losses = []
     train_dices = []

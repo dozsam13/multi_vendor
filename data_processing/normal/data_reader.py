@@ -19,6 +19,10 @@ class DataReader:
                     try:
                         patient_data = pickle.load(patient_file)
                         for ind, (img, cnt) in enumerate(zip(patient_data.images, patient_data.contours)):
+                            if img.shape in self.size_dict.keys():
+                                self.size_dict[img.shape] += 1
+                            else:
+                                self.size_dict[img.shape] = 1
                             result_img = np.zeros((256, 256))
                             result_cnt = np.zeros((256, 256))
                             x_axis_l = min(128, img.shape[0] // 2)
