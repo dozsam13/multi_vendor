@@ -42,7 +42,7 @@ def split_data(ratio1, ratio2, data_x, data_y):
 def run_train(run_on_pretrained, path):
     data_reader = DataReader(path)
 
-    (x_train, y_train), (x_test, y_test), (_, _) = split_data(0.05, 0.1, data_reader.x, data_reader.y)
+    (x_train, y_train), (x_test, y_test), (_, _) = split_data(0.65, 0.99, data_reader.x, data_reader.y)
     print("X_train: ", len(x_train), "X_dev: ", len(x_test))
     batch_size = 5
     augmenter = transforms.Compose([
@@ -74,7 +74,7 @@ def run_train(run_on_pretrained, path):
 
     criterion = DiceLoss()
     optimizer = optim.AdamW(model.parameters(), lr=0.0005, weight_decay=0.01)
-    epochs = 2
+    epochs = 90
     train_losses = []
     dev_losses = []
     train_dices = []

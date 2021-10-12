@@ -108,12 +108,12 @@ def train(sources):
     d_criterion = nn.CrossEntropyLoss()
     s_optimizer = optim.AdamW(segmentator.parameters(), lr=0.0005, weight_decay=0.0)
     d_optimizer = optim.AdamW(discriminator.parameters(), lr=0.0005, weight_decay=0.1)
-    a_optimizer = optim.AdamW(segmentator.encoder.parameters(), lr=0.003, weight_decay=0.1)
+    a_optimizer = optim.AdamW(segmentator.encoder.parameters(), lr=0.0003, weight_decay=0.1)
     s_train_losses = []
     s_dev_losses = []
     d_train_losses = []
     start_time = datetime.now()
-    epochs = 1
+    epochs = 50
     for epoch in range(epochs):
         s_train_loss = 0.0
         d_train_loss = 0.0
@@ -123,8 +123,8 @@ def train(sources):
             target_vendor = sample['vendor']
 
             # segmentator
-            predicted_mask, inner_repr = segmentator(img)
-            predicted_mask = sigmoid(predicted_mask)
+            predicted_activations, inner_repr = segmentator(img)
+            predicted_mask = sigmoid(predicted_activations)
             s_loss = s_criterion(predicted_mask, target_mask)
             s_optimizer.zero_grad()
             s_loss.backward()
@@ -132,11 +132,9 @@ def train(sources):
             s_train_loss += s_loss.cpu().detach().numpy()
 
             # discriminator
-            predicted_mask = predicted_mask.cpu().detach()
-            inner_repr = inner_repr.cpu().detach()
-            predicted_mask.to(device)
-            inner_repr.to(device)
-            predicted_vendor = discriminator(predicted_mask, inner_repr)
+            predicted_activations = predicted_activations.clone().detach()
+            inner_repr = inner_repr.clone().detach()
+            predicted_vendor = discriminator(predicted_activations, inner_repr)
             d_loss = d_criterion(predicted_vendor, target_vendor)
             d_optimizer.zero_grad()
             d_loss.backward()
