@@ -30,7 +30,7 @@ def progress_bar_with_time(done, total, start):
 
 def plot_data(data1, label1, data2, label2, filename):
     plt.clf()
-    plt.plot(data1, label=label1)
-    plt.plot(data2, label=label2)
+    plt.plot(data1, label=label1, linewidth=1.5)
+    plt.plot(data2, label=label2, linewidth=1.5)
     plt.legend()
     plt.savefig(filename)

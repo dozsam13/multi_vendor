@@ -41,7 +41,6 @@ def split_data(ratio1, ratio2, data_x, data_y):
 
 def run_train(run_on_pretrained, path):
     data_reader = DataReader(path)
-
     (x_train, y_train), (x_test, y_test), (_, _) = split_data(0.65, 0.99, data_reader.x, data_reader.y)
     print("X_train: ", len(x_train), "X_dev: ", len(x_test))
     batch_size = 5
@@ -72,17 +71,18 @@ def run_train(run_on_pretrained, path):
     model.eval()
     model.to(device)
 
-    criterion = DiceLoss()
+    criterion = nn.BCELoss()
     optimizer = optim.AdamW(model.parameters(), lr=0.0005, weight_decay=0.01)
-    epochs = 90
+    epochs = 120
     train_losses = []
     dev_losses = []
+    start_time = datetime.now()
     train_dices = []
     dev_dices = []
-    calc_dice = False
-    start_time = datetime.now()
+    calc_dices = True
     for epoch in range(epochs):
         train_loss = 0.0
+        model.train()
         for index, sample in enumerate(loader_train):
             img = sample['image']
             target = sample['target']
@@ -93,53 +93,21 @@ def run_train(run_on_pretrained, path):
             optimizer.step()
             train_loss += loss.cpu().detach().numpy()
         model.eval()
-        if calc_dice and epoch % 3 == 0:
-            model.eval()
-            train_dices.append(calculate_dice(model, loader_train_accuracy))
-            dev_dices.append(calculate_dice(model, loader_dev_accuracy))
         train_losses.append(train_loss / len(loader_train))
         dev_losses.append(calculate_loss(loader_dev, model, criterion))
         util.progress_bar_with_time(epoch + 1, epochs, start_time)
-        model.train()
+        if calc_dices and epoch % 3 == 0:
+            train_dices.append(calculate_dice(model, loader_train_accuracy))
+            dev_dices.append(calculate_dice(model, loader_dev_accuracy))
     util.plot_data(train_losses, 'train_losses', dev_losses, 'dev_losses', 'losses.png')
-    util.plot_data(train_dices, 'train_dices', dev_dices, 'dev_dices', 'dices.png')
-
+    util.plot_data(train_dices, 'train_dice', dev_dices, 'dev_dice', 'dices.png')
     if not run_on_pretrained:
         model_path = os.path.join(pathlib.Path(__file__).parent.absolute(), "pretrained_model.pth")
         torch.save(model.state_dict(), model_path)
 
     model.eval()
-    print("Train dice: ", calculate_dice(model, loader_train_accuracy))
-    print("Test dice: ", calculate_dice(model, loader_dev_accuracy))
-    pred_mask = torch.round(model(dataset_dev[0]['image'].unsqueeze(0))).cpu().detach().numpy().reshape(256, 256)
-    expected_mask = dataset_dev[0]['target'].cpu().detach().numpy().reshape(256, 256)
-    plt.imsave('mask.png', pred_mask)
-    plt.imsave('mask_expected.png', expected_mask)
-    plt.imsave('image.png', dataset_dev[0]['image'][0, :, :].cpu().detach().numpy().reshape(256, 256))
-
-
-def eval():
-    path = sys.argv[1]
-    data_reader = DataReader(path)
-    plt.imsave('mask.png', data_reader.y[0].reshape(256, 256))
-    plt.imsave('img.png', data_reader.x[0].reshape(256, 256))
-    device = torch.device('cuda')
-    dataset = VentricleSegmentationDataset(data_reader.x, data_reader.y, device)
-    loader_train_accuracy = DataLoader(dataset, 1)
-    print('Data len: ', len(dataset))
-    model = nn.Sequential(
-        nn.Conv2d(in_channels=1, out_channels=3, kernel_size=(1, 1)),
-        nn.BatchNorm2d(3),
-        torch.hub.load('mateuszbuda/brain-segmentation-pytorch', 'unet', in_channels=3, out_channels=1,
-                       init_features=32, pretrained=True)
-    )
-
-    state_d = torch.load(os.path.join(pathlib.Path(__file__).parent.absolute(), "trained_model.pth"))
-    model.load_state_dict(state_d)
-    model.to(device)
-    model.eval()
-
-    print("Dice: ", calculate_dice(model, loader_train_accuracy))
+    print("Max train dice: ", max(train_dices))
+    print("Max dev dice: ", max(dev_dices))
 
 
 if __name__ == '__main__':

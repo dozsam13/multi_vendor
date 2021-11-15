@@ -6,7 +6,7 @@ import random
 
 
 class MultiSourceDataReader:
-    vendors = {etlstream.Origin.SB: 'SB', etlstream.Origin.MC7: 'MC7', etlstream.Origin.ST11: 'ST11'}
+    vendors = {etlstream.Origin.SB: 'SB', etlstream.Origin.MC7: 'MC7', etlstream.Origin.ST11: 'ST11', etlstream.Origin.MC2: 'MC2'}
 
     def __init__(self, path, sources):
         self.x = []
@@ -14,7 +14,8 @@ class MultiSourceDataReader:
         self.vendor = []
         for source_index, source in enumerate(sources):
             p = os.path.join(path, MultiSourceDataReader.vendors[source])
-            patient_file_paths = list(map(lambda f: os.path.join(p, f), os.listdir(p)))[:40]
+            file_names = [f for f in os.listdir(p) if os.path.isfile(f)]
+            patient_file_paths = list(map(lambda f: os.path.join(p, f), file_names))
             for patient_file_path in patient_file_paths:
                 current_x = []
                 current_y = []
