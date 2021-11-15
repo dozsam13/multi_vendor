@@ -138,7 +138,7 @@ def train(train_sources, eval_source, train_ind):
     dev_dices = []
     eval_dices = []
     start_time = datetime.now()
-    epochs = 100
+    epochs = 200
     calc_dices = True
     da_loader_iter = iter(loader_da_train)
     for epoch in range(epochs):
@@ -147,13 +147,12 @@ def train(train_sources, eval_source, train_ind):
         for index, sample in enumerate(loader_s_train):
             img = sample['image']
             target_mask = sample['target']
-            target_vendor = sample['vendor']
 
             da_sample = next(da_loader_iter, None)
             if da_sample in None:
                 da_loader_iter = iter(loader_da_train)
                 da_sample = next(loader_da_train, None)
-            if epoch < 30 or epoch > 50:
+            if epoch < 40 or epoch > 70:
                 # segmentator
                 predicted_activations, inner_repr = segmentator(img)
                 predicted_mask = sigmoid(predicted_activations)
@@ -163,7 +162,7 @@ def train(train_sources, eval_source, train_ind):
                 s_optimizer.step()
                 s_train_loss += s_loss.cpu().detach().numpy()
 
-            if epoch >= 30:
+            if epoch >= 40:
                 # discriminator
                 predicted_activations, inner_repr = segmentator(da_sample['image'])
                 predicted_activations = predicted_activations.clone().detach()
