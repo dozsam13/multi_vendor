@@ -93,13 +93,13 @@ def train(train_sources, eval_source, train_ind):
     if torch.cuda.is_available():
         device = torch.device('cuda')
 
-    dataset_train = MultiSourceDataset(x_train, y_train, vendor_train, device, augmenter)
-    loader_train = DataLoader(dataset_train, batch_size)
-    loader_train_accuracy = DataLoader(dataset_train, 1)
+    dataset_s_train = MultiSourceDataset(x_train, y_train, vendor_train, device, augmenter)
+    loader_s_train = DataLoader(dataset_s_train, batch_size)
+    loader_s_train_accuracy = DataLoader(dataset_s_train, 1)
 
-    dataset_dev = MultiSourceDataset(x_dev, y_dev, vendor_dev, device)
-    loader_dev = DataLoader(dataset_dev, batch_size)
-    loader_dev_accuracy = DataLoader(dataset_dev, 1)
+    dataset_s_dev = MultiSourceDataset(x_dev, y_dev, vendor_dev, device)
+    loader_s_dev = DataLoader(dataset_s_dev, batch_size)
+    loader_s_dev_accuracy = DataLoader(dataset_s_dev, 1)
 
     datareader_eval_domain = DataReader(os.path.join(path, MultiSourceDataReader.vendors[eval_source]))
     (x_eval_domain, y_eval_domain), (_, _), (_, _) = split_data_single_source(0.99, 0.999, datareader_eval_domain.x,
@@ -107,6 +107,14 @@ def train(train_sources, eval_source, train_ind):
     dataset_eval_domain = VentricleSegmentationDataset(x_eval_domain, y_eval_domain, device)
     loader_eval_domain = DataLoader(dataset_eval_domain, batch_size)
     loader_eval_accuracy = DataLoader(dataset_eval_domain, 1)
+
+    train_sources.append(eval_source)
+    data_reader = MultiSourceDataReader(path, train_sources)
+    (x_da_train, y_da_train, vendor_da_train), _, _ = split_data(0.9999, 0.999999, data_reader.x,
+                                                                                         data_reader.y,
+                                                                                         data_reader.vendor)
+    dataset_da_train = MultiSourceDataset(x_da_train, y_da_train, vendor_da_train, device, augmenter)
+    loader_da_train = DataLoader(dataset_da_train, batch_size)
 
     segmentator = UNet()
 
@@ -132,14 +140,19 @@ def train(train_sources, eval_source, train_ind):
     start_time = datetime.now()
     epochs = 100
     calc_dices = True
+    da_loader_iter = iter(loader_da_train)
     for epoch in range(epochs):
         s_train_loss = 0.0
         d_train_loss = 0.0
-        for index, sample in enumerate(loader_train):
+        for index, sample in enumerate(loader_s_train):
             img = sample['image']
             target_mask = sample['target']
             target_vendor = sample['vendor']
 
+            da_sample = next(da_loader_iter, None)
+            if da_sample in None:
+                da_loader_iter = iter(loader_da_train)
+                da_sample = next(loader_da_train, None)
             if epoch < 30 or epoch > 50:
                 # segmentator
                 predicted_activations, inner_repr = segmentator(img)
@@ -152,10 +165,11 @@ def train(train_sources, eval_source, train_ind):
 
             if epoch >= 30:
                 # discriminator
+                predicted_activations, inner_repr = segmentator(da_sample['image'])
                 predicted_activations = predicted_activations.clone().detach()
                 inner_repr = inner_repr.clone().detach()
                 predicted_vendor = discriminator(predicted_activations, inner_repr)
-                d_loss = d_criterion(predicted_vendor, target_vendor)
+                d_loss = d_criterion(predicted_vendor, da_sample['vendor'])
                 d_optimizer.zero_grad()
                 d_loss.backward()
                 d_optimizer.step()
@@ -163,9 +177,9 @@ def train(train_sources, eval_source, train_ind):
 
             if epoch > 50:
                 # adversarial
-                predicted_mask, inner_repr = segmentator(img)
+                predicted_mask, inner_repr = segmentator(da_sample['image'])
                 predicted_vendor = discriminator(predicted_mask, inner_repr)
-                a_loss = -1 * d_criterion(predicted_vendor, target_vendor)
+                a_loss = -1 * d_criterion(predicted_vendor, da_sample['vendor'])
                 a_optimizer.zero_grad()
                 a_loss.backward()
                 a_optimizer.step()
@@ -179,13 +193,13 @@ def train(train_sources, eval_source, train_ind):
         eval_model = nn.Sequential(segmentator, selector, sigmoid)
         eval_model.to(device)
         eval_model.eval()
-        d_train_losses.append(d_train_loss / len(loader_train))
-        s_train_losses.append(s_train_loss / len(loader_train))
-        s_dev_losses.append(calculate_loss(loader_dev, eval_model, s_criterion))
+        d_train_losses.append(d_train_loss / len(loader_s_train))
+        s_train_losses.append(s_train_loss / len(loader_s_train))
+        s_dev_losses.append(calculate_loss(loader_s_dev, eval_model, s_criterion))
         eval_domain_losses.append(calculate_loss(loader_eval_domain, eval_model, s_criterion))
         if calc_dices and epoch % 3 == 0:
-            train_dices.append(calculate_dice(eval_model, loader_train_accuracy))
-            dev_dices.append(calculate_dice(eval_model, loader_dev_accuracy))
+            train_dices.append(calculate_dice(eval_model, loader_s_train_accuracy))
+            dev_dices.append(calculate_dice(eval_model, loader_s_dev_accuracy))
             eval_dices.append(calculate_dice(eval_model, loader_eval_accuracy))
         segmentator.train()
         util.progress_bar_with_time(epoch + 1, epochs, start_time)
