@@ -1,6 +1,6 @@
 """
 This module provides the streaming of unified objects
-from the different data sources.
+from the different data_processing sources.
 """
 import os
 import copy
@@ -12,11 +12,10 @@ import pandas as pd
 from enum import Enum
 import pydicom as dicom
 from scipy.io import loadmat
-import utils
-import dicom_reader
-import con_reader
+import util
+from data_processing import con_reader, dicom_reader
 
-logger = utils.get_logger(__name__)
+logger = util.get_logger(__name__)
 nib_cache = {}
 
 
@@ -62,7 +61,7 @@ class Pathology(Enum):
 class Contour:
 
     def __init__(self, origin_type):
-        self.origin_type = origin_type  # origin of the data source
+        self.origin_type = origin_type  # origin of the data_processing source
         self.origin_path = None  # full path to the con file
         self.patient_id = None  # an id for the patient, e.g.: study_id + serial_id
         self.length = 0  # length of the contour curve
@@ -84,7 +83,7 @@ class Contour:
 class LVQuant:
 
     def __init__(self, origin_type):
-        self.origin_type = origin_type  # origin of the data source
+        self.origin_type = origin_type  # origin of the data_processing source
         self.origin_path = None  # full path to the con file
         self.patient_id = None  # an id for the patient, e.g.: study_id + serial_id
         self.frame = -1  # frame in the cardiac cycle (-1 if not available)
@@ -103,7 +102,7 @@ class LVQuant:
 class Image:
 
     def __init__(self, origin_type):
-        self.origin_type = origin_type  # origin of the data source
+        self.origin_type = origin_type  # origin of the data_processing source
         self.origin_path = None  # full path to the dcm file
         self.patient_id = None  # an id for the patient, e.g.: study_id + serial_id
         self.size = None  # height and width tuple
@@ -159,17 +158,17 @@ class Image:
 class Patient:
 
     def __init__(self, origin_type):
-        self.origin_type = origin_type  # origin of the data source
+        self.origin_type = origin_type  # origin of the data_processing source
         self.origin_path = None  # full path to the serial folder
         self.patient_id = None  # an id for the patient, e.g.: study_id + serial_id
         self.path_group = Pathology.UNK
         self.gender = Gender.X
         self.height = None
         self.weight = None
-        self.pixel_spacing = None  # MRI specific data
+        self.pixel_spacing = None  # MRI specific data_processing
         self.slice_thicknes = None
         self.gap = None
-        self.vol_indices = None  # volume data and indices in a dictionary
+        self.vol_indices = None  # volume data_processing and indices in a dictionary
         self.ground_truths = []  # can be contours, masks, left-ventricle quantification etc.
         self.images = []
 
@@ -286,7 +285,7 @@ class Stream:
             cntr += 1
             with open(p_path, 'br') as f:
                 patient = pickle.load(f)
-            utils.progress_bar(cntr, all_patient, 50)
+            util.progress_bar(cntr, all_patient, 50)
             yield patient
 
     def _cache_exists(self):
@@ -320,8 +319,8 @@ class StreamVM(Stream):
     def __init__(self, segment_to_read, use_cache):
         super(StreamVM, self).__init__(segment_to_read, use_cache)
         self.cntr = 0
-        self.root = os.path.join(utils.DB_PATH, StreamVM.root_fd)
-        self.cache = os.path.join(utils.DB_PATH, StreamVM.cache_fd)
+        self.root = os.path.join(util.DB_PATH, StreamVM.root_fd)
+        self.cache = os.path.join(util.DB_PATH, StreamVM.cache_fd)
 
     def stream_from_source(self):
         # calculate the number of patients for checking progress
@@ -415,15 +414,15 @@ class StreamVM(Stream):
                 pickle_path = os.path.join(pickle_path, p.patient_id + '.pickle')
                 with open(pickle_path, 'wb') as f:
                     pickle.dump(p, f)  # create cache
-                utils.progress_bar(self.cntr, all_patient, 20)
+                util.progress_bar(self.cntr, all_patient, 20)
                 yield p
 
     @staticmethod
     def create_segments(num_of_segments, use_cache):
         if not use_cache:
-            root = os.path.join(utils.DB_PATH, StreamVM.root_fd)
+            root = os.path.join(util.DB_PATH, StreamVM.root_fd)
         else:
-            root = os.path.join(utils.DB_PATH, StreamVM.cache_fd)
+            root = os.path.join(util.DB_PATH, StreamVM.cache_fd)
         return Stream._create_segments(root, num_of_segments)
 
 
@@ -435,8 +434,8 @@ class StreamSB(Stream):
     def __init__(self, segment_to_read, use_cache):
         super(StreamSB, self).__init__(segment_to_read, use_cache)
         self.cntr = 0
-        self.root = os.path.join(utils.DB_PATH, StreamSB.root_fd)
-        self.cache = os.path.join(utils.DB_PATH, StreamSB.cache_fd)
+        self.root = os.path.join(util.DB_PATH, StreamSB.root_fd)
+        self.cache = os.path.join(util.DB_PATH, StreamSB.cache_fd)
 
     def stream_from_source(self):
         self.cntr = 0
@@ -501,16 +500,16 @@ class StreamSB(Stream):
             pickle_path = os.path.join(self.cache, img_folder + '.pickle')
             with open(pickle_path, 'wb') as f:
                 pickle.dump(p, f)  # create cache
-            utils.progress_bar(self.cntr, len(img_folders), 50)
+            util.progress_bar(self.cntr, len(img_folders), 50)
             yield p
 
     @staticmethod
     def create_segments(num_of_segments, use_cache):
         if not use_cache:
-            root = os.path.join(utils.DB_PATH, StreamSB.root_fd)
+            root = os.path.join(util.DB_PATH, StreamSB.root_fd)
             root = os.path.join(root, "SCD_DeidentifiedImages")
         else:
-            root = os.path.join(utils.DB_PATH, StreamSB.cache_fd)
+            root = os.path.join(util.DB_PATH, StreamSB.cache_fd)
         return Stream._create_segments(root, num_of_segments)
 
 
@@ -523,8 +522,8 @@ class StreamMC2(Stream):
         super(StreamMC2, self).__init__(segment_to_read, use_cache)
 
         self.cntr = 0
-        self.root = os.path.join(utils.DB_PATH, StreamMC2.root_fd)
-        self.cache = os.path.join(utils.DB_PATH, StreamMC2.cache_fd)
+        self.root = os.path.join(util.DB_PATH, StreamMC2.root_fd)
+        self.cache = os.path.join(util.DB_PATH, StreamMC2.cache_fd)
 
     def stream_from_source(self):
         self.cntr = 0
@@ -584,16 +583,16 @@ class StreamMC2(Stream):
             pickle_path = os.path.join(self.cache, patient_folder + '.pickle')
             with open(pickle_path, 'wb') as f:
                 pickle.dump(p, f)  # create cache
-            utils.progress_bar(self.cntr, len(patient_folders), 50)
+            util.progress_bar(self.cntr, len(patient_folders), 50)
             yield p
 
     @staticmethod
     def create_segments(num_of_segments, use_cache):
         if not use_cache:
-            root = os.path.join(utils.DB_PATH, StreamMC2.root_fd)
+            root = os.path.join(util.DB_PATH, StreamMC2.root_fd)
             root = os.path.join(root, "TrainingSet")
         else:
-            root = os.path.join(utils.DB_PATH, StreamMC2.cache_fd)
+            root = os.path.join(util.DB_PATH, StreamMC2.cache_fd)
         return Stream._create_segments(root, num_of_segments)
 
 
@@ -606,8 +605,8 @@ class StreamMC7(Stream):
         super(StreamMC7, self).__init__(segment_to_read, use_cache)
 
         self.cntr = 0
-        self.root = os.path.join(utils.DB_PATH, StreamMC7.root_fd)
-        self.cache = os.path.join(utils.DB_PATH, StreamMC7.cache_fd)
+        self.root = os.path.join(util.DB_PATH, StreamMC7.root_fd)
+        self.cache = os.path.join(util.DB_PATH, StreamMC7.cache_fd)
 
     def stream_from_source(self):
         self.cntr = 0
@@ -672,16 +671,16 @@ class StreamMC7(Stream):
             pickle_path = os.path.join(self.cache, patient_folder + '.pickle')
             with open(pickle_path, 'wb') as f:
                 pickle.dump(p, f)  # create cache
-            utils.progress_bar(self.cntr, len(patient_folders), 20)
+            util.progress_bar(self.cntr, len(patient_folders), 20)
             yield p
 
     @staticmethod
     def create_segments(num_of_segments, use_cache):
         if not use_cache:
-            root = os.path.join(utils.DB_PATH, StreamMC7.root_fd)
+            root = os.path.join(util.DB_PATH, StreamMC7.root_fd)
             root = os.path.join(root, "training")
         else:
-            root = os.path.join(utils.DB_PATH, StreamMC7.cache_fd)
+            root = os.path.join(util.DB_PATH, StreamMC7.cache_fd)
         return Stream._create_segments(root, num_of_segments)
 
 
@@ -694,8 +693,8 @@ class StreamST11(Stream):
         super(StreamST11, self).__init__(segment_to_read, use_cache)
 
         self.cntr = 0
-        self.root = os.path.join(utils.DB_PATH, StreamST11.root_fd)
-        self.cache = os.path.join(utils.DB_PATH, StreamST11.cache_fd)
+        self.root = os.path.join(util.DB_PATH, StreamST11.root_fd)
+        self.cache = os.path.join(util.DB_PATH, StreamST11.cache_fd)
 
     def stream_from_source(self):
         self.cntr = 0
@@ -751,16 +750,16 @@ class StreamST11(Stream):
             pickle_path = os.path.join(self.cache, patient_folder + '.pickle')
             with open(pickle_path, 'wb') as f:
                 pickle.dump(p, f)  # create cache
-            utils.progress_bar(self.cntr, len(patient_folders), 50)
+            util.progress_bar(self.cntr, len(patient_folders), 50)
             yield p
 
     @staticmethod
     def create_segments(num_of_segments, use_cache):
         if not use_cache:
-            root = os.path.join(utils.DB_PATH, StreamST11.root_fd)
+            root = os.path.join(util.DB_PATH, StreamST11.root_fd)
             root = os.path.join(root, "CAP_challenge_training_set")
         else:
-            root = os.path.join(utils.DB_PATH, StreamST11.cache_fd)
+            root = os.path.join(util.DB_PATH, StreamST11.cache_fd)
         return Stream._create_segments(root, num_of_segments)
 
 
@@ -773,8 +772,8 @@ class StreamST19(Stream):
         super(StreamST19, self).__init__(segment_to_read, use_cache)
 
         self.cntr = 0
-        self.root = os.path.join(utils.DB_PATH, StreamST19.root_fd)
-        self.cache = os.path.join(utils.DB_PATH, StreamST19.cache_fd)
+        self.root = os.path.join(util.DB_PATH, StreamST19.root_fd)
+        self.cache = os.path.join(util.DB_PATH, StreamST19.cache_fd)
 
     def stream_from_source(self):
         self.cntr = 0
@@ -823,14 +822,14 @@ class StreamST19(Stream):
             pickle_path = os.path.join(self.cache, p.patient_id + '.pickle')
             with open(pickle_path, 'wb') as f:
                 pickle.dump(p, f)  # create cache
-            utils.progress_bar(self.cntr, len(patient_datas), 10)
+            util.progress_bar(self.cntr, len(patient_datas), 10)
             yield p
 
     @staticmethod
     def create_segments(num_of_segments, use_cache):
         if not use_cache:
-            root = os.path.join(utils.DB_PATH, StreamST19.root_fd)
+            root = os.path.join(util.DB_PATH, StreamST19.root_fd)
             root = os.path.join(root, "TrainingData_LVQuan19")
         else:
-            root = os.path.join(utils.DB_PATH, StreamST19.cache_fd)
+            root = os.path.join(util.DB_PATH, StreamST19.cache_fd)
         return Stream._create_segments(root, num_of_segments)

@@ -1,4 +1,4 @@
-from utils import get_logger
+from util import get_logger
 from pydicom.pixel_data_handlers.util import apply_modality_lut
 from pydicom.errors import InvalidDicomError
 import pydicom as dicom
@@ -114,7 +114,7 @@ class DCMreaderVMsiemens:  # new siemens machine
         It follows carefully the physical slice locations and the frames in a hearth cycle.
         It does not matter if the location is getting higher or lower. 
         '''
-        self.images_unordered = list()  # contains the images and additional data
+        self.images_unordered = list()  # contains the images and additional data_processing
         
         dcm_files = os.listdir(folder_name)
         for dcm_fl in dcm_files:
@@ -190,7 +190,7 @@ class DCMreaderSB:  # sunnybrook
 
     def __init__(self, folder_name):
         """
-        Reads in a patient images from the Sunnybrook data set.
+        Reads in a patient images from the Sunnybrook data_processing set.
         Creates a dictionary as pairs of image number and the corresponding image path.
         """
         self.folder_name = folder_name  # name of the folder with the dicom images (with full path)
@@ -262,7 +262,7 @@ class DCMreaderMC2:  # miccai
 
     def __init__(self, folder_name):
         """
-        Reads in a patient images from the MICCAI 2012 data set.
+        Reads in a patient images from the MICCAI 2012 data_processing set.
         Creates a dictionary as pairs of image number and the corresponding image path.
         """
         self.folder_name = folder_name  # name of the folder with the dicom images (with full path)
@@ -345,7 +345,7 @@ class DCMreaderMC7:  # miccai
 
     def __init__(self, folder_name):
         """
-        Reads in a patient images from the MICCAI 2017 data set.
+        Reads in a patient images from the MICCAI 2017 data_processing set.
         Creates a dictionary as pairs of image number and the corresponding image path.
         """
         self.folder_name = folder_name  # name of the folder with the dicom images (with full path)
@@ -386,7 +386,7 @@ class DCMreaderST:  # stacom2011
 
     def __init__(self, folder_name):
         """
-        Reads in a patient images from the STACOM 2011 data set.
+        Reads in a patient images from the STACOM 2011 data_processing set.
         Creates a dictionary as pairs of image number and the corresponding image path.
         """
         self.folder_name = folder_name  # name of the folder with the dicom images (with full path)

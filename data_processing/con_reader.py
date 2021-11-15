@@ -1,9 +1,11 @@
-from utils import get_logger
 from copy import deepcopy
 import nibabel as nib
 import numpy as np
 import cv2
 import os
+import sys
+sys.path.append('../multi_vendor')
+from util import get_logger
 
 logger = get_logger(__name__)
 
@@ -19,7 +21,7 @@ class CONreaderVM:
         self.container = []
         self.contours = None
 
-        con_tag = "XYCONTOUR"  # start of the contour data
+        con_tag = "XYCONTOUR"  # start of the contour data_processing
         stop_tag = "POINT"     # if this is available, prevents from reading unnecessary lines
         volumerelated_tags = [
             'Study_id=',
