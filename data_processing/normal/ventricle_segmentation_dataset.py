@@ -10,7 +10,7 @@ class VentricleSegmentationDataset(Dataset):
         transforms.ToTensor()
     ])
 
-    def __init__(self, images, targets, device, augmenter=default_augmenter):
+    def __init__(self, images, targets, device, augmenter=lambda x: x):
         self.images = images
         self.targets = targets
         self.device = device

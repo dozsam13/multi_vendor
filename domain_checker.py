@@ -1,4 +1,4 @@
-from data_processing import etlstream, patient
+from data_processing import etlstream
 from data_processing.etlstream import StreamFactory
 
 

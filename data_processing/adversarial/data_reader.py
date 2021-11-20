@@ -14,8 +14,8 @@ class MultiSourceDataReader:
         self.vendor = []
         for source_index, source in enumerate(sources):
             p = os.path.join(path, MultiSourceDataReader.vendors[source])
-            file_names = [f for f in os.listdir(p) if os.path.isfile(f)]
-            patient_file_paths = list(map(lambda f: os.path.join(p, f), file_names))
+            patient_file_paths = list(map(lambda f: os.path.join(p, f), os.listdir(p)))
+            patient_file_paths = [f for f in patient_file_paths if os.path.isfile(f)]
             for patient_file_path in patient_file_paths:
                 current_x = []
                 current_y = []

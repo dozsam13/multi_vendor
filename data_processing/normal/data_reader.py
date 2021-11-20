@@ -6,8 +6,8 @@ import random
 
 class DataReader:
     def __init__(self, path):
-        file_names = [f for f in os.listdir(path) if os.path.isfile(f)]
-        patient_file_paths = list(map(lambda f: os.path.join(path, f), file_names))
+        patient_file_paths = list(map(lambda f: os.path.join(path, f), os.listdir(path)))
+        patient_file_paths = [f for f in patient_file_paths if os.path.isfile(f)]
         self.x = []
         self.y = []
         self.size_dict = {}
