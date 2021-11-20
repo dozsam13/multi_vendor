@@ -10,7 +10,7 @@ class VentricleSegmentationDataset(Dataset):
         transforms.ToTensor()
     ])
 
-    def __init__(self, images, targets, device, augmenter=lambda x: x):
+    def __init__(self, images, targets, device, augmenter=lambda x, y: (x, y)):
         self.images = images
         self.targets = targets
         self.device = device
@@ -22,9 +22,9 @@ class VentricleSegmentationDataset(Dataset):
     def __getitem__(self, index):
         stacked_data = np.append(self.targets[index], np.repeat(self.images[index], 2, axis=2), axis=2).astype('uint8')
 
-        img = self.augmenter(stacked_data)*255.0
+        img, cnt = self.augmenter(stacked_data)
         sample = {
-            'image': torch.unsqueeze(img[1, :, :], 0).to(self.device),
-            'target': torch.unsqueeze(img[0, :, :], 0).to(self.device),
+            'image': torch.tensor(img.reshape(1, 256, 256), dtype=torch.float, device=self.device),
+            'target': torch.tensor(cnt.reshape(1, 256, 256), dtype=torch.float, device=self.device),
         }
         return sample
