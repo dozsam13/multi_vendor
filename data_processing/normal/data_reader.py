@@ -2,6 +2,7 @@ import os
 import pickle
 import numpy as np
 import random
+from skimage.exposure import equalize_adapthist
 
 
 class DataReader:
@@ -30,6 +31,9 @@ class DataReader:
                             y_axis_l = min(128, img.shape[1] // 2)
                             result_img[128 - x_axis_l:128 + x_axis_l, 128 - y_axis_l:128 + y_axis_l] = img[img.shape[0] // 2 - x_axis_l:img.shape[0] // 2 + x_axis_l,img.shape[1] // 2 - y_axis_l:img.shape[1] // 2 + y_axis_l]
                             result_cnt[128 - x_axis_l:128 + x_axis_l, 128 - y_axis_l:128 + y_axis_l] = cnt[cnt.shape[0] // 2 - x_axis_l:cnt.shape[0] // 2 + x_axis_l,cnt.shape[1] // 2 - y_axis_l:cnt.shape[1] // 2 + y_axis_l]
+                            p5, p95 = np.percentile(result_img, (5, 95))
+                            result_img = (result_img - p5) / (p95 - p5)
+                            result_img = equalize_adapthist(np.clip(result_img, 1e-5, 1), kernel_size=24)[..., np.newaxis]
                             current_x.append(result_img.reshape(256, 256, 1))
                             current_y.append(result_cnt.reshape(256, 256, 1) / 255.0)
                     except EOFError:

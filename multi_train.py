@@ -112,12 +112,18 @@ def train(train_sources, eval_source):
     (x_da_train, y_da_train, vendor_da_train), _, _ = split_data(0.9999, 0.999999, data_reader.x,
                                                                                          data_reader.y,
                                                                                          data_reader.vendor)
+
     dataset_da_train = MultiSourceDataset(x_da_train, y_da_train, vendor_da_train, device, DomainAugmentation())
     loader_da_train = DataLoader(dataset_da_train, batch_size)
 
-    segmentator = UNet()
+    model_path = os.path.join(pathlib.Path(__file__).parent.absolute(), "model", "weights", "pretrained_segmentator.pth")
 
+    segmentator = UNet()
+    segmentator.load_state_dict(torch.load(model_path))
+
+    model_path = os.path.join(pathlib.Path(__file__).parent.absolute(), "model", "weights", "pretrained_discriminator.pth")
     discriminator = Discriminator(n_domains=len(train_sources))
+    discriminator.load_state_dict(torch.load(model_path))
 
     sigmoid = nn.Sigmoid()
     selector = Selector()
@@ -126,9 +132,10 @@ def train(train_sources, eval_source):
     segmentator.to(device)
     s_criterion = nn.BCELoss()
     d_criterion = nn.CrossEntropyLoss()
-    s_optimizer = optim.AdamW(segmentator.parameters(), lr=0.0005, weight_decay=0.1)
-    d_optimizer = optim.AdamW(discriminator.parameters(), lr=0.0005, weight_decay=0.2)
-    a_optimizer = optim.AdamW(segmentator.encoder.parameters(), lr=0.001, weight_decay=0.1)
+    s_optimizer = optim.AdamW(segmentator.parameters(), lr=0.001, weight_decay=0.01)
+    d_optimizer = optim.AdamW(discriminator.parameters(), lr=0.0001, weight_decay=0.01)
+    a_optimizer = optim.AdamW(segmentator.encoder.parameters(), lr=0.001, weight_decay=0.01)
+    lmbd = 1/150
     s_train_losses = []
     s_dev_losses = []
     d_train_losses = []
@@ -137,7 +144,7 @@ def train(train_sources, eval_source):
     dev_dices = []
     eval_dices = []
     start_time = datetime.now()
-    epochs = 300
+    epochs = 150
     calc_dices = True
     da_loader_iter = iter(loader_da_train)
     for epoch in range(epochs):
@@ -151,7 +158,7 @@ def train(train_sources, eval_source):
             if da_sample is None:
                 da_loader_iter = iter(loader_da_train)
                 da_sample = next(da_loader_iter, None)
-            if epoch < 40 or epoch > 70:
+            if True: #epoch < 40 or epoch > 70:
                 # segmentator
                 predicted_activations, inner_repr = segmentator(img)
                 predicted_mask = sigmoid(predicted_activations)
@@ -161,7 +168,7 @@ def train(train_sources, eval_source):
                 s_optimizer.step()
                 s_train_loss += s_loss.cpu().detach().numpy()
 
-            if epoch >= 40:
+            if True:#epoch >= 40:
                 # discriminator
                 predicted_activations, inner_repr = segmentator(da_sample['image'])
                 predicted_activations = predicted_activations.clone().detach()
@@ -173,20 +180,15 @@ def train(train_sources, eval_source):
                 d_optimizer.step()
                 d_train_loss += d_loss.cpu().detach().numpy()
 
-            if epoch > 70:
+            if True: #epoch > 70:
                 # adversarial
                 predicted_mask, inner_repr = segmentator(da_sample['image'])
                 predicted_vendor = discriminator(predicted_mask, inner_repr)
-                a_loss = -1 * d_criterion(predicted_vendor, da_sample['vendor'])
+                a_loss = -1 * lmbd * d_criterion(predicted_vendor, da_sample['vendor'])
                 a_optimizer.zero_grad()
                 a_loss.backward()
                 a_optimizer.step()
-        if epoch == 70:
-            model_path = os.path.join(pathlib.Path(__file__).parent.absolute(), "model", "weights", "pretrained_segmentator.pth")
-            torch.save(segmentator.state_dict(), model_path)
-            model_path = os.path.join(pathlib.Path(__file__).parent.absolute(), "model", "weights", "pretrained_discriminator.pth")
-            torch.save(discriminator.state_dict(), model_path)
-
+                lmbd += 1/150
         ###########################################
         eval_model = nn.Sequential(segmentator, selector, sigmoid)
         eval_model.to(device)
@@ -202,13 +204,62 @@ def train(train_sources, eval_source):
         segmentator.train()
         util.progress_bar_with_time(epoch + 1, epochs, start_time)
 
+    date_time = datetime.now().strftime("%m%d%Y_%H%M%S")
+    model_path = os.path.join(pathlib.Path(__file__).parent.absolute(), "model", "weights", "pretrained_segmentator"+str(date_time)+".pth")
+    torch.save(segmentator.state_dict(), model_path)
+    model_path = os.path.join(pathlib.Path(__file__).parent.absolute(), "model", "weights", "pretrained_discriminator"+str(date_time)+".pth")
+    torch.save(discriminator.state_dict(), model_path)
+
     plot_data([(s_train_losses, 'train_losses'), (s_dev_losses, 'dev_losses'), (d_train_losses, 'discriminator_losses'),
                (eval_domain_losses, 'eval_domain_losses')],
               'losses.png')
     plot_data([(train_dices, 'train_dice'), (dev_dices, 'dev_dice'), (eval_dices, 'eval_dice')],
               'dices.png')
     print(max(train_dices), max(dev_dices), max(eval_dices))
-    print(train_dices[70], dev_dices[70])
+
+
+def check_perf(train_sources, eval_source):
+    path = sys.argv[1]
+    data_reader = MultiSourceDataReader(path, train_sources)
+    print(len(data_reader.x))
+
+    (x_train, y_train, vendor_train), (x_dev, y_dev, vendor_dev), (_, _, _) = split_data(0.7, 0.9999, data_reader.x,
+                                                                                         data_reader.y,
+                                                                                         data_reader.vendor)
+
+    device = torch.device('cpu')
+    if torch.cuda.is_available():
+        device = torch.device('cuda')
+
+    batch_size = 8
+    dataset_s_train = MultiSourceDataset(x_train, y_train, vendor_train, device, DomainAugmentation())
+    loader_s_train_accuracy = DataLoader(dataset_s_train, 1)
+
+    dataset_s_dev = MultiSourceDataset(x_dev, y_dev, vendor_dev, device)
+    loader_s_dev = DataLoader(dataset_s_dev, batch_size)
+    loader_s_dev_accuracy = DataLoader(dataset_s_dev, 1)
+
+    datareader_eval_domain = DataReader(os.path.join(path, MultiSourceDataReader.vendors[eval_source]))
+    (x_eval_domain, y_eval_domain), _, _ = split_data_single_source(0.99, 0.999, datareader_eval_domain.x,
+                                                                              datareader_eval_domain.y)
+    dataset_eval_domain = VentricleSegmentationDataset(x_eval_domain, y_eval_domain, device)
+    loader_eval_domain = DataLoader(dataset_eval_domain, batch_size)
+    loader_eval_accuracy = DataLoader(dataset_eval_domain, 1)
+
+    model_path = os.path.join(pathlib.Path(__file__).parent.absolute(), "model", "weights", "pretrained_segmentator.pth")
+
+    segmentator = UNet()
+    segmentator.load_state_dict(torch.load(model_path))
+
+    sigmoid = nn.Sigmoid()
+    selector = Selector()
+    eval_model = nn.Sequential(segmentator, selector, sigmoid)
+    eval_model.to(device)
+    eval_model.eval()
+
+    print(calculate_dice(eval_model, loader_s_train_accuracy))
+    print(calculate_dice(eval_model, loader_s_dev_accuracy))
+    print(calculate_dice(eval_model, loader_eval_accuracy))
 
 
 if __name__ == '__main__':
@@ -224,3 +275,4 @@ if __name__ == '__main__':
     eval_source = etlstream.Origin.MC7
 
     train(train_sources, eval_source)
+    #check_perf(train_sources, eval_source)
