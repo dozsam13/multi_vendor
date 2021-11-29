@@ -28,10 +28,11 @@ def progress_bar_with_time(done, total, start):
     remaining_time = time.strftime('%H:%M:%S', time.gmtime(left.total_seconds()))
     progress_bar(done, total, length=50, prefix='Training:', suffix=remaining_time)
 
+
 def plot_data(data_with_label, filename):
     plt.clf()
     for (data, label) in data_with_label:
-        plt.plot(data, label=label, linewidth=3.0)
+        plt.plot(data, label=label, linewidth=1.1)
     plt.legend()
     plt.savefig(filename)
 
@@ -42,6 +43,7 @@ def plot_data(data1, label1, data2, label2, filename):
     plt.plot(data2, label=label2, linewidth=1.1)
     plt.legend()
     plt.savefig(filename)
+
 
 def plot_dice(data_with_label, filename):
     plt.clf()

@@ -41,14 +41,14 @@ def split_data(ratio1, ratio2, data_x, data_y):
 
 def run_train(run_on_pretrained, path):
     data_reader = DataReader(path)
-    (x_train, y_train), (x_test, y_test), (_, _) = split_data(0.65, 0.99, data_reader.x, data_reader.y)
+    (x_train, y_train), (x_test, y_test), (_, _) = split_data(0.75, 0.99, data_reader.x, data_reader.y)
     print("X_train: ", len(x_train), "X_dev: ", len(x_test))
-    batch_size = 5
+    batch_size = 8
     augmenter = transforms.Compose([
         #img_warp.SineWarp(10),
         #warp2.ElasticTransform(),
         transforms.ToPILImage(),
-        transforms.RandomAffine([-45, 45], translate=(0.3, 0.3)),
+        transforms.RandomAffine([-45, 45], translate=(0.0, 0.3), scale=(0.8, 1.2)),
         transforms.ToTensor()
     ])
     device = torch.device('cpu')
@@ -63,31 +63,42 @@ def run_train(run_on_pretrained, path):
     loader_dev = DataLoader(dataset_dev, batch_size)
     loader_dev_accuracy = DataLoader(dataset_dev, 1)
 
-    model = nn.Sequential(UNet(), Selector(), nn.Sigmoid())
+    model = nn.Sequential(
+        nn.Conv2d(in_channels=1, out_channels=3, kernel_size=(1, 1)),
+        nn.BatchNorm2d(3),
+        nn.ReLU(),
+        torch.hub.load('mateuszbuda/brain-segmentation-pytorch', 'unet', in_channels=3, out_channels=1, init_features=32, pretrained=True),
+        )
+    model.train()
 
     if run_on_pretrained:
         state_d = torch.load(os.path.join(pathlib.Path(__file__).parent.absolute(), "pretrained_model.pth"))
         model.load_state_dict(state_d)
-    model.eval()
     model.to(device)
+    model.train()
 
-    criterion = nn.BCELoss()
-    optimizer = optim.AdamW(model.parameters(), lr=0.0005, weight_decay=0.01)
-    epochs = 120
+    criterion = DiceLoss()
+    optimizer = optim.AdamW(model.parameters(), lr=0.00001, weight_decay=0.2)
+    epochs = 300
     train_losses = []
     dev_losses = []
     start_time = datetime.now()
     train_dices = []
     dev_dices = []
     calc_dices = True
+    lmbd = 1.0
     for epoch in range(epochs):
+        if epoch > 20 and epoch < 60:
+            lmbd += 0.00001
+        if epoch > 200 and epoch < 240:
+            lmbd -= 0.00001
         train_loss = 0.0
         model.train()
         for index, sample in enumerate(loader_train):
             img = sample['image']
             target = sample['target']
             predicted = model(img)
-            loss = criterion(predicted, target)
+            loss = lmbd*criterion(predicted, target)
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
@@ -100,15 +111,56 @@ def run_train(run_on_pretrained, path):
             train_dices.append(calculate_dice(model, loader_train_accuracy))
             dev_dices.append(calculate_dice(model, loader_dev_accuracy))
     util.plot_data(train_losses, 'train_losses', dev_losses, 'dev_losses', 'losses.png')
-    util.plot_data(train_dices, 'train_dice', dev_dices, 'dev_dice', 'dices.png')
+    util.plot_dice([(train_dices, 'train_dice'), (dev_dices, 'dev_dice')], 'dices.png')
     if not run_on_pretrained:
         model_path = os.path.join(pathlib.Path(__file__).parent.absolute(), "pretrained_model.pth")
         torch.save(model.state_dict(), model_path)
 
-    model.eval()
-    print("Max train dice: ", max(train_dices))
-    print("Max dev dice: ", max(dev_dices))
+    print(max(train_dices), " ", max(dev_dices))
 
+    return calculate_dice_values(model, loader_dev_accuracy)
+
+
+def check_img(path):
+    data_reader = DataReader(path)
+    (x_train, y_train), (x_test, y_test), (_, _) = split_data(0.75, 0.99, data_reader.x, data_reader.y)
+    print("X_train: ", len(x_train), "X_dev: ", len(x_test))
+
+    device = torch.device('cpu')
+    if torch.cuda.is_available():
+        device = torch.device('cuda')
+
+    dataset_dev = VentricleSegmentationDataset(x_test, y_test, device)
+    model = nn.Sequential(
+        nn.Conv2d(in_channels=1, out_channels=3, kernel_size=(1, 1)),
+        nn.BatchNorm2d(3),
+        nn.ReLU(),
+        torch.hub.load('mateuszbuda/brain-segmentation-pytorch', 'unet', in_channels=3, out_channels=1, init_features=32, pretrained=True),
+        )
+
+    state_d = torch.load(os.path.join(pathlib.Path(__file__).parent.absolute(), "transfer_learning_unet_bceloss_mc7.pth"))
+    model.load_state_dict(state_d)
+    model.to(device)
+
+    pred_mask = torch.round(model(dataset_dev[0]['image'].unsqueeze(0))).cpu().detach().numpy().reshape(256, 256)
+    expected_mask = dataset_dev[0]['target'].cpu().detach().numpy().reshape(256, 256)
+
+    plt.subplot(2, 2, 1)
+    plt.imshow(dataset_dev[0]['image'][0, :, :].cpu().detach().numpy().reshape(256, 256), cmap='gray')
+    plt.axis('off')
+    plt.title("a")
+    plt.subplot(2, 2, 2)
+    plt.imshow(expected_mask, cmap='gray')
+    plt.axis('off')
+    plt.title("b")
+    plt.subplot(2, 2, 3)
+    plt.imshow(pred_mask, cmap='gray')
+    plt.axis('off')
+    plt.title("c")
+    plt.savefig('masks.png')
+    #plt.imsave('mask.png', pred_mask, cmap='gray')
+    #plt.imsave('mask_expected.png', expected_mask, cmap='gray')
+    #plt.imsave('image.png', dataset_dev[0]['image'][0, :, :].cpu().detach().numpy().reshape(256, 256), cmap='gray')
 
 if __name__ == '__main__':
     torch.backends.cudnn.deterministic = True
@@ -118,4 +170,9 @@ if __name__ == '__main__':
     random.seed(234)
     torch.cuda.empty_cache()
     gc.collect()
-    run_train(run_on_pretrained=False, path=sys.argv[1])
+    #sb_dices = run_train(run_on_pretrained=False, path=sys.argv[1])
+    #st_dices = run_train(run_on_pretrained=False, path='/userhome/student/dozsa/multi_vendor/out_filled/ST11')
+    #mc_dices = run_train(run_on_pretrained=False, path='/userhome/student/dozsa/multi_vendor/out_filled/MC7')
+    #util.boxplot([sb_dices, st_dices, mc_dices], ['SB', 'ST11', 'MC7'], 'sb_boxplot.png')
+    check_img(path='/userhome/student/dozsa/multi_vendor/out_filled/MC7')
+
