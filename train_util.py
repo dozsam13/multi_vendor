@@ -29,6 +29,17 @@ def calculate_dice(model, data_loader):
     return s / len(data_loader)
 
 
+def calculate_dice_values(model, data_loader):
+    dices = []
+    for sample in data_loader:
+        img = sample['image']
+        target = sample['target'].cpu().detach().numpy()
+        predicted = model(img)
+        predicted = torch.round(predicted).cpu().detach().numpy()
+        dices.append(calc_dice_for_img(predicted, target))
+    return dices
+
+
 def calc_dice_for_img(predicted, target):
     smooth = 1.
 

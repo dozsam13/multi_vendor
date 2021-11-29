@@ -243,7 +243,18 @@ def try_noise_aug():
     plt.title("b")
     plt.show()
 
+def plot_box(data, labels):
+    red_square = dict(markerfacecolor='r', marker='s')
+
+    fig1, ax1 = plt.subplots()
+    ax1.boxplot(data, flierprops=red_square)
+    ax1.set_xticklabels(labels)
+    plt.ylim([0.0, 1.0])
+    plt.ylabel('Dice')
+    plt.grid(color='w')
+    ax1.set_facecolor((204.0/255.0, 247.0/255.0, 230.0/255.0))
+    plt.show()
 
 if __name__ == '__main__':
     # create_images_from_preprocessed_data("C:\dev\multi_vendor\out_filled\ST11")
-    try_noise_aug()
+    plot_box([np.array([0.1, 0.2, 0.3, 0.4]), np.array([0.1, 0.2, 0.3, 0.3, 0.9])], ['one', 'two'])

@@ -24,13 +24,6 @@ from datetime import datetime
 from augmentation.domain_augmentation import DomainAugmentation
 
 
-def plot_data(data_with_label, filename):
-    plt.clf()
-    for (data, label) in data_with_label:
-        plt.plot(data, label=label, linewidth=3.0)
-    plt.legend()
-    plt.savefig(filename)
-
 
 def split_data(ratio1, ratio2, data_x, data_y, data_vendor):
     indices = [*range(len(data_x))]
@@ -210,10 +203,10 @@ def train(train_sources, eval_source):
     model_path = os.path.join(pathlib.Path(__file__).parent.absolute(), "model", "weights", "pretrained_discriminator"+str(date_time)+".pth")
     torch.save(discriminator.state_dict(), model_path)
 
-    plot_data([(s_train_losses, 'train_losses'), (s_dev_losses, 'dev_losses'), (d_train_losses, 'discriminator_losses'),
+    util.plot_data([(s_train_losses, 'train_losses'), (s_dev_losses, 'dev_losses'), (d_train_losses, 'discriminator_losses'),
                (eval_domain_losses, 'eval_domain_losses')],
               'losses.png')
-    plot_data([(train_dices, 'train_dice'), (dev_dices, 'dev_dice'), (eval_dices, 'eval_dice')],
+    util.plot_dice([(train_dices, 'train_dice'), (dev_dices, 'dev_dice'), (eval_dices, 'eval_dice')],
               'dices.png')
     print(max(train_dices), max(dev_dices), max(eval_dices))
 
