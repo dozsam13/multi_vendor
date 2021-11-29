@@ -4,17 +4,19 @@ from torchvision import transforms
 import numpy as np
 
 
-class VentricleSegmentationDataset(Dataset):
+class MultiSourceDataset(Dataset):
     default_augmenter = transforms.Compose([
         transforms.ToPILImage(),
         transforms.ToTensor()
     ])
 
-    def __init__(self, images, targets, device, augmenter=default_augmenter):
+    def __init__(self, images, targets, vendors, device, augmenter=default_augmenter):
         self.images = images
         self.targets = targets
         self.device = device
+        self.vendors = vendors
         self.augmenter = augmenter
+        self.vendors = vendors
 
     def __len__(self):
         return len(self.images)
@@ -26,5 +28,6 @@ class VentricleSegmentationDataset(Dataset):
         sample = {
             'image': torch.unsqueeze(img[1, :, :], 0).to(self.device),
             'target': torch.unsqueeze(img[0, :, :], 0).to(self.device),
+            'vendor': torch.tensor(self.vendors[index], dtype=torch.long, device=self.device)
         }
         return sample
