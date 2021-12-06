@@ -61,7 +61,7 @@ def boxplot(data, labels, filename):
     red_square = dict(markerfacecolor='r', marker='s')
 
     fig1, ax1 = plt.subplots()
-    ax1.boxplot(data, flierprops=red_square)
+    ax1.boxplot(data, showfliers=False)
     ax1.set_xticklabels(labels)
     plt.ylim([0.0, 1.0])
     plt.ylabel('Dice')

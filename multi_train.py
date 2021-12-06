@@ -28,38 +28,37 @@ import json
 class Discriminator(nn.Module):
     def __init__(self, channel_n, vendor_n):
         super(Discriminator, self).__init__()
-        # self.net = nn.Sequential(
-        #     self._block(1, channel_n, 4, 2, 1),
-        #     self._block(channel_n, channel_n * 2, 4, 2, 1),
-        #     self._block(channel_n * 2, channel_n * 4, 4, 2, 1),
-        #     self._block(channel_n * 4, channel_n * 8, 4, 2, 1),
-        #     self._block(channel_n * 8, channel_n * 12, 4, 2, 1),
-        #     self._block(channel_n * 12, channel_n * 15, 4, 2, 1),
-        #     nn.Linear(vendor_n, 480)
-        # )
-        self.conv1 = nn.Conv2d(in_channels=3, out_channels=3, kernel_size=(3, 3), stride=1)
-        self.conv2 = nn.Conv2d(in_channels=3, out_channels=6, kernel_size=(2, 2), stride=1)
-        self.conv3 = nn.Conv2d(in_channels=6, out_channels=9, kernel_size=(3, 3), stride=1)
-        self.conv4 = nn.Conv2d(in_channels=9, out_channels=12, kernel_size=(2, 2), stride=1)
-        self.conv5 = nn.Conv2d(in_channels=12, out_channels=13, kernel_size=(3, 3), stride=1)
+        self.conv_net = nn.Sequential(
+        	nn.Conv2d(in_channels=3, out_channels=3, kernel_size=(3, 3), stride=1),
+        	nn.BatchNorm2d(3),
+        	nn.ReLU(),
+        	nn.MaxPool2d(kernel_size=(2, 2), stride=2),
+        	nn.Conv2d(in_channels=3, out_channels=6, kernel_size=(2, 2), stride=1),
+        	nn.BatchNorm2d(6),
+        	nn.ReLU(),
+        	nn.MaxPool2d(kernel_size=(2, 2), stride=2),
+        	nn.Conv2d(in_channels=6, out_channels=9, kernel_size=(3, 3), stride=1),
+        	nn.BatchNorm2d(9),
+        	nn.ReLU(),
+        	nn.MaxPool2d(kernel_size=(2, 2), stride=2),
+        	nn.Conv2d(in_channels=9, out_channels=12, kernel_size=(2, 2), stride=1),
+        	nn.BatchNorm2d(12),
+        	nn.ReLU(),
+        	nn.MaxPool2d(kernel_size=(2, 2), stride=2),
+        	nn.Conv2d(in_channels=12, out_channels=13, kernel_size=(3, 3), stride=1),
+        	nn.BatchNorm2d(13),
+        	nn.ReLU(),
+        	nn.MaxPool2d(kernel_size=(2, 2), stride=2)
+        )
+        
         self.linear = nn.Linear(468, vendor_n)
         self.maxpool_2_2 = nn.MaxPool2d(kernel_size=(2, 2), stride=2)
 
         self.relu = nn.ReLU()
 
-    # def _block(self, in_channels, out_channels, kernel_size, stride, padding):
-    #     return nn.Sequential(
-    #         nn.Conv2d(in_channels, out_channels, kernel_size, stride, padding),
-    #         nn.LeakyReLU(0.2)
-    #     )
 
     def forward(self, x):
-        # s = self.net(x)
-        temp = self.maxpool_2_2(self.relu(self.conv1(x)))
-        temp = self.maxpool_2_2(self.relu(self.conv2(temp)))
-        temp = self.maxpool_2_2(self.relu(self.conv3(temp)))
-        temp = self.maxpool_2_2(self.relu(self.conv4(temp)))
-        temp = self.maxpool_2_2(self.relu(self.conv5(temp)))
+        temp = self.conv_net(x)
         temp = temp.view(-1, 468)
 
         return self.linear(temp)
@@ -151,11 +150,13 @@ def train(train_sources, eval_source):
     loader_eval_domain = DataLoader(dataset_eval_domain, batch_size)
     loader_eval_accuracy = DataLoader(dataset_eval_domain, 1)
 
+    model_path = os.path.join(pathlib.Path(__file__).parent.absolute(), "model", "weights", "premodel_unet", "basic_multitrain","SBST11_pretrained_segmentator_unetv0_11302021_180842.pth")
     segmentator = nn.Sequential(
         pre_model,
         torch.hub.load('mateuszbuda/brain-segmentation-pytorch', 'unet', in_channels=3, out_channels=1,
                        init_features=32, pretrained=True)
     )
+    segmentator.load_state_dict(torch.load(model_path))
 
     discriminator = nn.Sequential(
         pre_model,
@@ -167,9 +168,9 @@ def train(train_sources, eval_source):
 
     s_criterion = nn.BCELoss()
     d_criterion = nn.CrossEntropyLoss()
-    s_optimizer = optim.AdamW(segmentator.parameters(), lr=0.00001, weight_decay=0.2)
-    d_optimizer = optim.AdamW(discriminator.parameters(), lr=0.0001, weight_decay=0.01)
-    a_optimizer = optim.AdamW(pre_model.parameters(), lr=0.001, weight_decay=0.01)
+    s_optimizer = optim.AdamW(segmentator.parameters(), lr=0.0007, weight_decay=0.05)
+    d_optimizer = optim.AdamW(discriminator.parameters(), lr=0.00007, weight_decay=0.01)
+    a_optimizer = optim.AdamW(pre_model.parameters(), lr=0.0007, weight_decay=0.01)
     lmbd = 1.0
     s_train_losses = []
     s_dev_losses = []
@@ -179,13 +180,9 @@ def train(train_sources, eval_source):
     dev_dices = []
     eval_dices = []
     start_time = datetime.now()
-    epochs = 300
+    epochs = 200
     calc_dices = True
     for epoch in range(epochs):
-        if 20 < epoch < 60:
-            lmbd += 0.00001
-        if 200 < epoch < 240:
-            lmbd -= 0.00001
         s_train_loss = 0.0
         d_train_loss = 0.0
         for index, sample in enumerate(loader_s_train):
@@ -193,7 +190,7 @@ def train(train_sources, eval_source):
             target_mask = sample['target']
             target_vendor = sample['vendor']
 
-            if True: #epoch < 40 or epoch > 70:
+            if True:#epoch > 50:
                 # segmentator
                 predicted_mask = segmentator(img)
                 s_loss = lmbd*s_criterion(predicted_mask, target_mask)
@@ -202,7 +199,7 @@ def train(train_sources, eval_source):
                 s_optimizer.step()
                 s_train_loss += s_loss.cpu().detach().numpy()
 
-            if False:#epoch >= 40:
+            if True:
                 # discriminator
                 predicted_vendor = discriminator(img)
                 d_loss = d_criterion(predicted_vendor, target_vendor)
@@ -211,14 +208,15 @@ def train(train_sources, eval_source):
                 d_optimizer.step()
                 d_train_loss += d_loss.cpu().detach().numpy()
 
-            if False: #epoch > 70:
+            if True:#epoch > 50:
                 # adversarial
                 predicted_vendor = discriminator(img)
                 a_loss = -1 * lmbd * d_criterion(predicted_vendor, target_vendor)
                 a_optimizer.zero_grad()
                 a_loss.backward()
                 a_optimizer.step()
-                lmbd += 1/150
+            #if 50<epoch<200:
+            #    lmbd += 1.0/150.0
         ###########################################
         d_train_losses.append(d_train_loss / len(loader_s_train))
         s_train_losses.append(s_train_loss / len(loader_s_train))
@@ -231,12 +229,14 @@ def train(train_sources, eval_source):
         segmentator.train()
         util.progress_bar_with_time(epoch + 1, epochs, start_time)
     date_time = datetime.now().strftime("%m%d%Y_%H%M%S")
-    model_path = os.path.join(pathlib.Path(__file__).parent.absolute(), "model", "weights", "premodel_unet","pretrained_segmentator_unetv0_"+str(date_time)+".pth")
+    model_path = os.path.join(pathlib.Path(__file__).parent.absolute(), "model", "weights", "premodel_unet","adv_trained_segmentator_"+str(date_time)+".pth")
     torch.save(segmentator.state_dict(), model_path)
+    discriminator_path = os.path.join(pathlib.Path(__file__).parent.absolute(), "model", "weights", "premodel_unet","adv_trained_discriminator_"+str(date_time)+".pth")
+    torch.save(discriminator.state_dict(), discriminator_path)
 
-    util.plot_data_list([(s_train_losses, 'train_losses'), (s_dev_losses, 'dev_losses')],
+    util.plot_data_list([(s_train_losses, 'seg_train_losses'), (s_dev_losses, 'seg_dev_losses'), (d_train_losses, 'disc_losses')],
               'losses' + str(date_time)+'.png')
-    util.plot_dice([(train_dices, 'train_dice'), (dev_dices, 'dev_dice')],
+    util.plot_dice([(train_dices, 'train_dice'), (dev_dices, 'dev_dice'), (eval_dices, 'eval_dice')],
               'dices' + str(date_time) + '.png')
 
     dice_dump_path = os.path.join(pathlib.Path(__file__).parent.absolute(), "model", "weights", "premodel_unet",
@@ -282,7 +282,7 @@ def check_perf(train_sources, eval_source):
     loader_eval_domain = DataLoader(dataset_eval_domain, batch_size)
     loader_eval_accuracy = DataLoader(dataset_eval_domain, 1)
 
-    model_path = os.path.join(pathlib.Path(__file__).parent.absolute(), "model", "weights", "pretrained_segmentator.pth")
+    model_path = os.path.join(pathlib.Path(__file__).parent.absolute(), "model", "weights", "SBST11_pretrained_segmentator_unetv0_11302021_180842.pth")
 
     segmentator = UNet()
     segmentator.load_state_dict(torch.load(model_path))
@@ -298,6 +298,7 @@ def check_perf(train_sources, eval_source):
     print(calculate_dice(eval_model, loader_eval_accuracy))
 
 
+
 if __name__ == '__main__':
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
@@ -307,15 +308,15 @@ if __name__ == '__main__':
     torch.cuda.empty_cache()
     gc.collect()
 
-    train_sources = [etlstream.Origin.ST11, etlstream.Origin.MC7]
-    eval_source = etlstream.Origin.SB
-    train(train_sources, eval_source)
+    #train_sources = [etlstream.Origin.ST11, etlstream.Origin.MC7]
+    #eval_source = etlstream.Origin.SB
+    #train(train_sources, eval_source)
 
-    # train_sources = [etlstream.Origin.MC7, etlstream.Origin.SB]
-    # eval_source = etlstream.Origin.ST11
-    # train(train_sources, eval_source)
-    #
-    # train_sources = [etlstream.Origin.ST11, etlstream.Origin.SB]
-    # eval_source = etlstream.Origin.MC7
-    # train(train_sources, eval_source)
+    #train_sources = [etlstream.Origin.MC7, etlstream.Origin.SB]
+    #eval_source = etlstream.Origin.ST11
+    #train(train_sources, eval_source)
+
+    train_sources = [etlstream.Origin.ST11, etlstream.Origin.SB]
+    eval_source = etlstream.Origin.MC7
+    train(train_sources, eval_source)
     #check_perf(train_sources, eval_source)

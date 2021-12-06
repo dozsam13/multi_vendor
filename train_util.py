@@ -41,13 +41,11 @@ def calculate_dice_values(model, data_loader):
 
 
 def calc_dice_for_img(predicted, target):
-    smooth = 1.
+    smooth = 0.000001
 
-    pred_flat = predicted.reshape(-1)
-    target_flat = target.reshape(-1)
-    intersection = np.dot(pred_flat, target_flat)
+    intersection = predicted * target
 
-    return (2. * intersection + smooth) / (np.sum(pred_flat) + np.sum(target_flat) + smooth)
+    return (2. * np.sum(intersection) + smooth) / (np.sum(predicted) + np.sum(target) + smooth)
 
 
 def flatten(t):
