@@ -1,15 +1,8 @@
 from torch.utils.data import Dataset
 import torch
-from torchvision import transforms
-import numpy as np
 
 
-class VentricleSegmentationDataset(Dataset):
-    default_augmenter = transforms.Compose([
-        transforms.ToPILImage(),
-        transforms.ToTensor()
-    ])
-
+class SingleDomainDataset(Dataset):
     def __init__(self, images, targets, device, augmenter=lambda x, y: (x, y)):
         self.images = images
         self.targets = targets

@@ -1,18 +1,12 @@
-from data_processing.adversarial.data_reader import MultiSourceDataReader
-from data_processing.normal.data_reader import DataReader
+from data_processing.data_reader import DataReader
 from torch.utils.data import DataLoader
 import sys
-import torch
-from data_processing.adversarial.ventricle_segmentation_dataset import MultiSourceDataset
-from data_processing.normal.ventricle_segmentation_dataset import VentricleSegmentationDataset
-import matplotlib.pyplot as plt
-import torch.nn as nn
+from data_processing.dataset import MultiDomainDataset
+from data_processing.single_domain.dataset import SingleDomainDataset
 import torch.optim as optim
-from torchvision import transforms
 import util
 import os
 import pathlib
-import numpy as np
 from data_processing import etlstream
 from train_util import *
 from model.discriminator import Discriminator
@@ -22,101 +16,59 @@ import random
 import gc
 from datetime import datetime
 from augmentation.domain_augmentation import DomainAugmentation
-
-
-
-def split_data(ratio1, ratio2, data_x, data_y, data_vendor):
-    indices = [*range(len(data_x))]
-    n = len(data_x)
-    np.random.shuffle(indices)
-
-    train_indices = indices[:int(n * ratio1)]
-    dev_indices = indices[int(n * ratio1):int(n * ratio2)]
-    test_indices = indices[int(n * ratio2):]
-
-    train_x = flatten([data_x[idx] for idx in train_indices])
-    train_y = flatten([data_y[idx] for idx in train_indices])
-    train_vendor = flatten([data_vendor[idx] for idx in train_indices])
-    dev_x = flatten([data_x[idx] for idx in dev_indices])
-    dev_y = flatten([data_y[idx] for idx in dev_indices])
-    dev_vendor = flatten([data_vendor[idx] for idx in dev_indices])
-    test_x = flatten([data_x[idx] for idx in test_indices])
-    test_y = flatten([data_y[idx] for idx in test_indices])
-    test_vendor = flatten([data_vendor[idx] for idx in test_indices])
-
-    return (train_x, train_y, train_vendor), (dev_x, dev_y, dev_vendor), (test_x, test_y, test_vendor)
-
-
-def split_data_single_source(ratio1, ratio2, data_x, data_y):
-    indices = [*range(len(data_x))]
-    n = len(data_x)
-    np.random.shuffle(indices)
-
-    train_indices = indices[:int(n * ratio1)]
-    dev_indices = indices[int(n * ratio1):int(n * ratio2)]
-    test_indices = indices[int(n * ratio2):]
-
-    train_x = flatten([data_x[idx] for idx in train_indices])
-    train_y = flatten([data_y[idx] for idx in train_indices])
-    dev_x = flatten([data_x[idx] for idx in dev_indices])
-    dev_y = flatten([data_y[idx] for idx in dev_indices])
-    test_x = flatten([data_x[idx] for idx in test_indices])
-    test_y = flatten([data_y[idx] for idx in test_indices])
-
-    return (train_x, train_y), (dev_x, dev_y), (test_x, test_y)
+from tqdm import tqdm
 
 
 def train(train_sources, eval_source):
     path = sys.argv[1]
-    data_reader = MultiSourceDataReader(path, train_sources)
-    print(len(data_reader.x))
+    dr = DataReader(path, train_sources)
+    dr.read()
+    ####################################################
+    dr.train.x = dr.train.x[:5]
+    dr.train.y = dr.train.y[:5]
+    dr.train.vendor = dr.train.vendor[:5]
+    dr.dev.x = dr.dev.x[:3]
+    dr.dev.y = dr.dev.y[:3]
+    dr.dev.vendor = dr.dev.vendor[:3]
+    dr.test.x = dr.test.x[:3]
+    dr.test.y = dr.test.y[:3]
+    dr.test.vendor = dr.test.vendor[:3]
+    ###################################################
+    print(len(dr.train.x))
 
-    (x_train, y_train, vendor_train), (x_dev, y_dev, vendor_dev), (_, _, _) = split_data(0.7, 0.9999, data_reader.x,
-                                                                                         data_reader.y,
-                                                                                         data_reader.vendor)
-    print(len(x_train), len(x_dev))
     batch_size = 8
-    augmenter = transforms.Compose([
-        transforms.ToPILImage(),
-        transforms.RandomAffine([-45, 45], translate=(0.3, 0.3)),
-        transforms.ToTensor()
-    ])
     device = torch.device('cpu')
     if torch.cuda.is_available():
         device = torch.device('cuda')
 
-    dataset_s_train = MultiSourceDataset(x_train, y_train, vendor_train, device, DomainAugmentation())
-    loader_s_train = DataLoader(dataset_s_train, batch_size)
-    loader_s_train_accuracy = DataLoader(dataset_s_train, 1)
+    dataset_s_train = MultiDomainDataset(dr.train.x, dr.train.y, dr.train.vendor, device, DomainAugmentation())
+    dataset_s_dev = MultiDomainDataset(dr.dev.x, dr.dev.y, dr.dev.vendor, device)
+    dataset_s_test = MultiDomainDataset(dr.test.x, dr.test.y, dr.test.vendor, device)
+    loader_s_train = DataLoader(dataset_s_train, batch_size, shuffle=True)
 
-    dataset_s_dev = MultiSourceDataset(x_dev, y_dev, vendor_dev, device)
-    loader_s_dev = DataLoader(dataset_s_dev, batch_size)
-    loader_s_dev_accuracy = DataLoader(dataset_s_dev, 1)
+    dr_eval = DataReader(path, [eval_source])
+    dr_eval.read()
+    ############################################################
+    dr.train.x = dr.train.x[:5]
+    dr.train.y = dr.train.y[:5]
+    dr.train.vendor = dr.train.vendor[:5]
+    dr.dev.x = dr.dev.x[:3]
+    dr.dev.y = dr.dev.y[:3]
+    dr.dev.vendor = dr.dev.vendor[:3]
+    dr.test.x = dr.test.x[:3]
+    dr.test.y = dr.test.y[:3]
+    dr.test.vendor = dr.test.vendor[:3]
+    ###########################################################
 
-    datareader_eval_domain = DataReader(os.path.join(path, MultiSourceDataReader.vendors[eval_source]))
-    (x_eval_domain, y_eval_domain), _, _ = split_data_single_source(0.99, 0.999, datareader_eval_domain.x,
-                                                                              datareader_eval_domain.y)
-    dataset_eval_domain = VentricleSegmentationDataset(x_eval_domain, y_eval_domain, device)
-    loader_eval_domain = DataLoader(dataset_eval_domain, batch_size)
-    loader_eval_accuracy = DataLoader(dataset_eval_domain, 1)
+    dataset_eval_dev = MultiDomainDataset(dr_eval.dev.x, dr_eval.dev.y, dr_eval.dev.vendor, device)
+    dataset_eval_test = MultiDomainDataset(dr_eval.test.x, dr_eval.test.y, dr_eval.test.vendor, device)
 
-    train_sources.append(eval_source)
-    data_reader = MultiSourceDataReader(path, train_sources)
-    (x_da_train, y_da_train, vendor_da_train), _, _ = split_data(0.9999, 0.999999, data_reader.x,
-                                                                                         data_reader.y,
-                                                                                         data_reader.vendor)
-
-    dataset_da_train = MultiSourceDataset(x_da_train, y_da_train, vendor_da_train, device, DomainAugmentation())
-    loader_da_train = DataLoader(dataset_da_train, batch_size)
-
-    model_path = os.path.join(pathlib.Path(__file__).parent.absolute(), "model", "weights", "pretrained_segmentator.pth")
+    dataset_da_train = MultiDomainDataset(dr.train.x+dr_eval.train.x, dr.train.y+dr_eval.train.y, dr.train.vendor+dr_eval.train.vendor, device, DomainAugmentation())
+    loader_da_train = DataLoader(dataset_da_train, batch_size, shuffle=True)
 
     segmentator = UNet()
-    segmentator.load_state_dict(torch.load(model_path))
 
-    model_path = os.path.join(pathlib.Path(__file__).parent.absolute(), "model", "weights", "pretrained_discriminator.pth")
     discriminator = Discriminator(n_domains=len(train_sources))
-    discriminator.load_state_dict(torch.load(model_path))
 
     sigmoid = nn.Sigmoid()
     selector = Selector()
@@ -125,8 +77,8 @@ def train(train_sources, eval_source):
     segmentator.to(device)
     s_criterion = nn.BCELoss()
     d_criterion = nn.CrossEntropyLoss()
-    s_optimizer = optim.AdamW(segmentator.parameters(), lr=0.001, weight_decay=0.01)
-    d_optimizer = optim.AdamW(discriminator.parameters(), lr=0.0001, weight_decay=0.01)
+    s_optimizer = optim.AdamW(segmentator.parameters(), lr=0.0001, weight_decay=0.01)
+    d_optimizer = optim.AdamW(discriminator.parameters(), lr=0.001, weight_decay=0.01)
     a_optimizer = optim.AdamW(segmentator.encoder.parameters(), lr=0.001, weight_decay=0.01)
     lmbd = 1/150
     s_train_losses = []
@@ -136,11 +88,9 @@ def train(train_sources, eval_source):
     train_dices = []
     dev_dices = []
     eval_dices = []
-    start_time = datetime.now()
-    epochs = 150
-    calc_dices = True
+    epochs = 3
     da_loader_iter = iter(loader_da_train)
-    for epoch in range(epochs):
+    for epoch in tqdm(range(epochs)):
         s_train_loss = 0.0
         d_train_loss = 0.0
         for index, sample in enumerate(loader_s_train):
@@ -148,11 +98,14 @@ def train(train_sources, eval_source):
             target_mask = sample['target']
 
             da_sample = next(da_loader_iter, None)
+            if True:#epoch == 100:
+                s_optimizer.defaults['lr'] = 0.001
+                d_optimizer.defaults['lr'] = 0.0001
             if da_sample is None:
                 da_loader_iter = iter(loader_da_train)
                 da_sample = next(da_loader_iter, None)
-            if True: #epoch < 40 or epoch > 70:
-                # segmentator
+            if True:#epoch < 50 or epoch >= 100:
+                # Training step of segmentator
                 predicted_activations, inner_repr = segmentator(img)
                 predicted_mask = sigmoid(predicted_activations)
                 s_loss = s_criterion(predicted_mask, target_mask)
@@ -161,8 +114,8 @@ def train(train_sources, eval_source):
                 s_optimizer.step()
                 s_train_loss += s_loss.cpu().detach().numpy()
 
-            if True:#epoch >= 40:
-                # discriminator
+            if True:#epoch >= 50:
+                # Training step of discriminator
                 predicted_activations, inner_repr = segmentator(da_sample['image'])
                 predicted_activations = predicted_activations.clone().detach()
                 inner_repr = inner_repr.clone().detach()
@@ -173,8 +126,8 @@ def train(train_sources, eval_source):
                 d_optimizer.step()
                 d_train_loss += d_loss.cpu().detach().numpy()
 
-            if True: #epoch > 70:
-                # adversarial
+            if True:#epoch >= 100:
+                # adversarial training step
                 predicted_mask, inner_repr = segmentator(da_sample['image'])
                 predicted_vendor = discriminator(predicted_mask, inner_repr)
                 a_loss = -1 * lmbd * d_criterion(predicted_vendor, da_sample['vendor'])
@@ -183,76 +136,36 @@ def train(train_sources, eval_source):
                 a_optimizer.step()
                 lmbd += 1/150
         ###########################################
-        eval_model = nn.Sequential(segmentator, selector, sigmoid)
-        eval_model.to(device)
-        eval_model.eval()
+        inference_model = nn.Sequential(segmentator, selector, sigmoid)
+        inference_model.to(device)
+        inference_model.eval()
         d_train_losses.append(d_train_loss / len(loader_s_train))
         s_train_losses.append(s_train_loss / len(loader_s_train))
-        s_dev_losses.append(calculate_loss(loader_s_dev, eval_model, s_criterion))
-        eval_domain_losses.append(calculate_loss(loader_eval_domain, eval_model, s_criterion))
-        if calc_dices and epoch % 3 == 0:
-           train_dices.append(calculate_dice(eval_model, loader_s_train_accuracy))
-           dev_dices.append(calculate_dice(eval_model, loader_s_dev_accuracy))
-           eval_dices.append(calculate_dice(eval_model, loader_eval_accuracy))
+        s_dev_losses.append(calculate_loss(dataset_s_dev, inference_model, s_criterion, batch_size))
+        eval_domain_losses.append(calculate_loss(dataset_eval_dev, inference_model, s_criterion, batch_size))
+
+        train_dices.append(calculate_dice(inference_model, dataset_s_train))
+        dev_dices.append(calculate_dice(inference_model, dataset_s_dev))
+        eval_dices.append(calculate_dice(inference_model, dataset_eval_dev))
+
         segmentator.train()
-        util.progress_bar_with_time(epoch + 1, epochs, start_time)
 
     date_time = datetime.now().strftime("%m%d%Y_%H%M%S")
-    model_path = os.path.join(pathlib.Path(__file__).parent.absolute(), "model", "weights", "pretrained_segmentator"+str(date_time)+".pth")
+    model_path = os.path.join(pathlib.Path(__file__).parent.absolute(), "model", "weights", "segmentator"+str(date_time)+".pth")
     torch.save(segmentator.state_dict(), model_path)
-    model_path = os.path.join(pathlib.Path(__file__).parent.absolute(), "model", "weights", "pretrained_discriminator"+str(date_time)+".pth")
-    torch.save(discriminator.state_dict(), model_path)
 
     util.plot_data([(s_train_losses, 'train_losses'), (s_dev_losses, 'dev_losses'), (d_train_losses, 'discriminator_losses'),
                (eval_domain_losses, 'eval_domain_losses')],
               'losses.png')
     util.plot_dice([(train_dices, 'train_dice'), (dev_dices, 'dev_dice'), (eval_dices, 'eval_dice')],
               'dices.png')
-    print(max(train_dices), max(dev_dices), max(eval_dices))
 
+    inference_model = nn.Sequential(segmentator, selector, sigmoid)
+    inference_model.to(device)
+    inference_model.eval()
 
-def check_perf(train_sources, eval_source):
-    path = sys.argv[1]
-    data_reader = MultiSourceDataReader(path, train_sources)
-    print(len(data_reader.x))
-
-    (x_train, y_train, vendor_train), (x_dev, y_dev, vendor_dev), (_, _, _) = split_data(0.7, 0.9999, data_reader.x,
-                                                                                         data_reader.y,
-                                                                                         data_reader.vendor)
-
-    device = torch.device('cpu')
-    if torch.cuda.is_available():
-        device = torch.device('cuda')
-
-    batch_size = 8
-    dataset_s_train = MultiSourceDataset(x_train, y_train, vendor_train, device, DomainAugmentation())
-    loader_s_train_accuracy = DataLoader(dataset_s_train, 1)
-
-    dataset_s_dev = MultiSourceDataset(x_dev, y_dev, vendor_dev, device)
-    loader_s_dev = DataLoader(dataset_s_dev, batch_size)
-    loader_s_dev_accuracy = DataLoader(dataset_s_dev, 1)
-
-    datareader_eval_domain = DataReader(os.path.join(path, MultiSourceDataReader.vendors[eval_source]))
-    (x_eval_domain, y_eval_domain), _, _ = split_data_single_source(0.99, 0.999, datareader_eval_domain.x,
-                                                                              datareader_eval_domain.y)
-    dataset_eval_domain = VentricleSegmentationDataset(x_eval_domain, y_eval_domain, device)
-    loader_eval_domain = DataLoader(dataset_eval_domain, batch_size)
-    loader_eval_accuracy = DataLoader(dataset_eval_domain, 1)
-
-    model_path = os.path.join(pathlib.Path(__file__).parent.absolute(), "model", "weights", "pretrained_segmentator.pth")
-
-    segmentator = UNet()
-    segmentator.load_state_dict(torch.load(model_path))
-
-    sigmoid = nn.Sigmoid()
-    selector = Selector()
-    eval_model = nn.Sequential(segmentator, selector, sigmoid)
-    eval_model.to(device)
-    eval_model.eval()
-
-    print(calculate_dice(eval_model, loader_s_train_accuracy))
-    print(calculate_dice(eval_model, loader_s_dev_accuracy))
-    print(calculate_dice(eval_model, loader_eval_accuracy))
+    print('Dice on annotated: ', calculate_dice(inference_model, dataset_s_test))
+    print('Dice on unannotated: ', calculate_dice(inference_model, dataset_eval_test))
 
 
 if __name__ == '__main__':
@@ -264,8 +177,6 @@ if __name__ == '__main__':
     torch.cuda.empty_cache()
     gc.collect()
 
-    train_sources = [etlstream.Origin.ST11, etlstream.Origin.SB]
+    train_sources = [etlstream.Origin.SB]
     eval_source = etlstream.Origin.MC7
-
     train(train_sources, eval_source)
-    #check_perf(train_sources, eval_source)

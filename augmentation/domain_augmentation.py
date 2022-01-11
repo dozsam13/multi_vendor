@@ -37,9 +37,7 @@ class DomainAugmentation:
         )
         composed_trf = gryds.ComposedTransformation(bspline_trf, affine_trf)
 
-        # z_ind = np.random.randint(1)
         t_ind = np.random.randint(2)
-        #t_ind elott z_ind volt
         interpolator = gryds.Interpolator(image[:, :], mode='reflect')
 
         interpolator_label = gryds.Interpolator(label[:, :], order=0, mode='constant')

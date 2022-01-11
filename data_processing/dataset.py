@@ -1,15 +1,8 @@
 from torch.utils.data import Dataset
 import torch
-from torchvision import transforms
-import numpy as np
 
 
-class MultiSourceDataset(Dataset):
-    default_augmenter = transforms.Compose([
-        transforms.ToPILImage(),
-        transforms.ToTensor()
-    ])
-
+class MultiDomainDataset(Dataset):
     def __init__(self, images, targets, vendors, device, augmenter=lambda x, y: (x, y)):
         self.images = images
         self.targets = targets

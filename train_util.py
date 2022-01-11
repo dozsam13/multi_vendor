@@ -1,9 +1,11 @@
 import torch
 import numpy as np
 import torch.nn as nn
+from torch.utils.data import DataLoader
 
 
-def calculate_loss(loader, model, criterion):
+def calculate_loss(dataset, model, criterion, batch_size):
+    loader = DataLoader(dataset, batch_size)
     loss_sum = 0.0
     for sample in loader:
         image = sample['image']
@@ -18,7 +20,8 @@ def calculate_loss(loader, model, criterion):
     return loss_sum / len(loader)
 
 
-def calculate_dice(model, data_loader):
+def calculate_dice(model, dataset):
+    data_loader = DataLoader(dataset, 1)
     s = 0
     for sample in data_loader:
         img = sample['image']
