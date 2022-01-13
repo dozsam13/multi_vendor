@@ -1,8 +1,6 @@
 from data_processing.data_reader import DataReader
-from torch.utils.data import DataLoader
 import sys
 from data_processing.dataset import MultiDomainDataset
-from data_processing.single_domain.dataset import SingleDomainDataset
 import torch.optim as optim
 import util
 import os
@@ -23,17 +21,6 @@ def train(train_sources, eval_source):
     path = sys.argv[1]
     dr = DataReader(path, train_sources)
     dr.read()
-    ####################################################
-    dr.train.x = dr.train.x[:5]
-    dr.train.y = dr.train.y[:5]
-    dr.train.vendor = dr.train.vendor[:5]
-    dr.dev.x = dr.dev.x[:3]
-    dr.dev.y = dr.dev.y[:3]
-    dr.dev.vendor = dr.dev.vendor[:3]
-    dr.test.x = dr.test.x[:3]
-    dr.test.y = dr.test.y[:3]
-    dr.test.vendor = dr.test.vendor[:3]
-    ###################################################
     print(len(dr.train.x))
 
     batch_size = 8
@@ -48,17 +35,6 @@ def train(train_sources, eval_source):
 
     dr_eval = DataReader(path, [eval_source])
     dr_eval.read()
-    ############################################################
-    dr.train.x = dr.train.x[:5]
-    dr.train.y = dr.train.y[:5]
-    dr.train.vendor = dr.train.vendor[:5]
-    dr.dev.x = dr.dev.x[:3]
-    dr.dev.y = dr.dev.y[:3]
-    dr.dev.vendor = dr.dev.vendor[:3]
-    dr.test.x = dr.test.x[:3]
-    dr.test.y = dr.test.y[:3]
-    dr.test.vendor = dr.test.vendor[:3]
-    ###########################################################
 
     dataset_eval_dev = MultiDomainDataset(dr_eval.dev.x, dr_eval.dev.y, dr_eval.dev.vendor, device)
     dataset_eval_test = MultiDomainDataset(dr_eval.test.x, dr_eval.test.y, dr_eval.test.vendor, device)
@@ -67,14 +43,13 @@ def train(train_sources, eval_source):
     loader_da_train = DataLoader(dataset_da_train, batch_size, shuffle=True)
 
     segmentator = UNet()
-
     discriminator = Discriminator(n_domains=len(train_sources))
+    discriminator.to(device)
+    segmentator.to(device)
 
     sigmoid = nn.Sigmoid()
     selector = Selector()
 
-    discriminator.to(device)
-    segmentator.to(device)
     s_criterion = nn.BCELoss()
     d_criterion = nn.CrossEntropyLoss()
     s_optimizer = optim.AdamW(segmentator.parameters(), lr=0.0001, weight_decay=0.01)
@@ -98,13 +73,13 @@ def train(train_sources, eval_source):
             target_mask = sample['target']
 
             da_sample = next(da_loader_iter, None)
-            if True:#epoch == 100:
+            if epoch == 100:
                 s_optimizer.defaults['lr'] = 0.001
                 d_optimizer.defaults['lr'] = 0.0001
             if da_sample is None:
                 da_loader_iter = iter(loader_da_train)
                 da_sample = next(da_loader_iter, None)
-            if True:#epoch < 50 or epoch >= 100:
+            if epoch < 50 or epoch >= 100:
                 # Training step of segmentator
                 predicted_activations, inner_repr = segmentator(img)
                 predicted_mask = sigmoid(predicted_activations)
@@ -114,7 +89,7 @@ def train(train_sources, eval_source):
                 s_optimizer.step()
                 s_train_loss += s_loss.cpu().detach().numpy()
 
-            if True:#epoch >= 50:
+            if epoch >= 50:
                 # Training step of discriminator
                 predicted_activations, inner_repr = segmentator(da_sample['image'])
                 predicted_activations = predicted_activations.clone().detach()
@@ -126,7 +101,7 @@ def train(train_sources, eval_source):
                 d_optimizer.step()
                 d_train_loss += d_loss.cpu().detach().numpy()
 
-            if True:#epoch >= 100:
+            if epoch >= 100:
                 # adversarial training step
                 predicted_mask, inner_repr = segmentator(da_sample['image'])
                 predicted_vendor = discriminator(predicted_mask, inner_repr)
@@ -135,7 +110,6 @@ def train(train_sources, eval_source):
                 a_loss.backward()
                 a_optimizer.step()
                 lmbd += 1/150
-        ###########################################
         inference_model = nn.Sequential(segmentator, selector, sigmoid)
         inference_model.to(device)
         inference_model.eval()
